@@ -1,0 +1,15 @@
+{
+  "tracks": [
+    {
+      "id": "demo",
+      "title": "Demo Track",
+      "artist": "Andrew Bray",
+      "stems": [
+        { "name": "Drums",  "src": "stems/demo/drums.mp3" },
+        { "name": "Bass",   "src": "stems/demo/bass.mp3" },
+        { "name": "Chords", "src": "stems/demo/chords.mp3" },
+        { "name": "Lead",   "src": "stems/demo/lead.mp3" }
+      ]
+    }
+  ]
+}
