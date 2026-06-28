@@ -41,6 +41,15 @@ async function main() {
     el.addEventListener("error", () => showError(`Stem "${stem.name}" failed to load (others continue).`));
   }
   playerEl.appendChild(player);
+
+  // stemplayer-js computes its waveform pixel-width only on a resize/layout event.
+  // When the player is built programmatically, the initial recalc can run before the
+  // workspace has measured its width, leaving waveforms at zero width forever. Nudging
+  // a resize after the element is laid out (and again once audio finishes loading)
+  // forces the recalculation. See StemPlayer #recalculatePixelsPerSecond / Workspace.waveformWidth.
+  const kickResize = () => player.dispatchEvent(new Event("resize"));
+  requestAnimationFrame(kickResize);
+  player.addEventListener("loading-end", kickResize);
 }
 
 main();
