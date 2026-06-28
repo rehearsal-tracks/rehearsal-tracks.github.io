@@ -1,0 +1,11 @@
+{
+  "name": "stem-player-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "segment": "node scripts/segment-song.js"
+  },
+  "engines": { "node": ">=18" }
+}
