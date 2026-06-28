@@ -45,11 +45,15 @@ Run against a real 15-stem, ~10-minute song.
 | **Device: Android Chrome** — manual pass on a real device | ⬜ | |
 | **iOS autoplay** — playback requires a tap; AudioContext resumes on that gesture; no autoplay attempted before it | ⬜ | |
 
-## Smoke results so far (desktop)
+## Results so far
 
 - ✅ 2-stem real song ("A Brand New Day") streams and plays in sync on desktop Chrome.
 - ✅ Waveforms render; per-stem volume / mute / solo functional.
-- ⬜ 15-stem / 10-min song not yet validated.
+- ✅ **Large content confirmed working: 10+ WAV stems, ~10-min songs** stream and stay in sync on desktop.
+- ✅ **Mobile device: functionality confirmed great** on a real device (full formal matrix below not yet exhaustively filled — sample-accuracy/memory/concurrency confirmed functionally, not yet formally measured).
+- Overall verdict (Andrew, 2026-06-28): working great; moving forward to post-M1 roadmap.
+
+The formal per-row matrix above remains to be filled in with measurements when time allows; functional behavior is confirmed good.
 
 ---
 
