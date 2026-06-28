@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
-import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { resolve, join } from "node:path";
 import { promisify } from "node:util";
 const run = promisify(execFile);
 
@@ -33,8 +34,19 @@ export async function segmentToHls(file, outDir, bitrate = "128k") {
 }
 
 export async function generateWaveform(file, outPath) {
-  await run("audiowaveform", [
-    "-i", file, "-o", outPath,
-    "--output-format", "json", "--pixels-per-second", "20", "--bits", "8",
-  ]);
+  const input = resolve(file);
+  // audiowaveform cannot read AAC/m4a (and several other) containers — it only handles
+  // WAV/MP3/FLAC/Ogg/Opus. Decode to a temp WAV via ffmpeg first so any ffmpeg-readable
+  // input works uniformly.
+  const tmp = await mkdtemp(join(tmpdir(), "waveform-"));
+  const wav = join(tmp, "audio.wav");
+  try {
+    await run("ffmpeg", ["-y", "-v", "error", "-i", input, wav]);
+    await run("audiowaveform", [
+      "-i", wav, "-o", outPath,
+      "--output-format", "json", "--pixels-per-second", "20", "--bits", "8",
+    ]);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
 }
