@@ -1,5 +1,8 @@
-export function checkEqualLength(stems, toleranceMs) {
-  if (!stems || stems.length === 0) throw new Error("no stems to validate");
+// Informational length report over the stems. Stems no longer need to be
+// equal length: shorter stems simply end early (common zero-start). The CLI
+// surfaces the spread as a note, never a gate.
+export function lengthReport(stems) {
+  if (!stems || stems.length === 0) throw new Error("no stems to report");
   const seconds = stems.map((s) => s.seconds);
   const min = Math.min(...seconds);
   const max = Math.max(...seconds);
@@ -7,5 +10,5 @@ export function checkEqualLength(stems, toleranceMs) {
   const table = stems
     .map((s) => `  ${s.name.padEnd(20)} ${s.seconds.toFixed(3)}s`)
     .join("\n");
-  return { ok: spreadMs <= toleranceMs, spreadMs, min, max, table };
+  return { spreadMs, min, max, table };
 }

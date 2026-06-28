@@ -3,13 +3,14 @@
 import { readdir, writeFile, mkdir } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { join, extname } from "node:path";
-import { stemNameFromFilename, toSlug } from "./lib/slug.js";
-import { checkEqualLength } from "./lib/validate.js";
+import { toSlug } from "./lib/slug.js";
+import { parseStem } from "./lib/ordering.js";
+import { lengthReport } from "./lib/validate.js";
 import { buildManifest } from "./lib/manifest.js";
+import { refreshCatalog } from "./lib/catalog.js";
 import { probeDuration, segmentToHls, generateWaveform } from "./lib/media.js";
-import { uploadDir } from "./lib/upload.js";
+import { uploadDir, listSongIds, readRemoteManifest, uploadJson } from "./lib/upload.js";
 
-const TOLERANCE_MS = 50;
 const AUDIO_EXT = new Set([".wav", ".mp3", ".flac", ".aiff", ".aif", ".m4a"]);
 
 function parseArgs(argv) {
@@ -52,14 +53,17 @@ async function main() {
   // Probe durations; skip unreadable files with a warning, abort if none remain. Spec §8.
   const stems = [];
   for (const file of audioFiles) {
-    const name = stemNameFromFilename(file);
+    const { order, name } = parseStem(file);
     try {
-      stems.push({ file, name, slug: toSlug(name), seconds: await probeDuration(file) });
+      stems.push({ file, order, name, slug: toSlug(name), seconds: await probeDuration(file) });
     } catch (e) {
       console.warn(`• skipping unreadable file ${file}: ${e.message}`);
     }
   }
   if (stems.length === 0) fail("No readable audio stems remain after probing.");
+
+  // Player order: numeric filename prefixes first (ascending), then unprefixed by filename.
+  stems.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.file.localeCompare(b.file));
 
   // Guard against slug collisions (would clobber output dirs and manifest entries).
   const seenSlugs = new Map();
@@ -68,9 +72,11 @@ async function main() {
     seenSlugs.set(s.slug, s.name);
   }
 
-  const v = checkEqualLength(stems, TOLERANCE_MS);
-  console.log(`Stems (${stems.length}):\n${v.table}`);
-  if (!v.ok) fail(`Stem lengths differ by ${v.spreadMs}ms (tolerance ${TOLERANCE_MS}ms). Re-export equal-length stems.`);
+  const report = lengthReport(stems);
+  console.log(`Stems (${stems.length}):\n${report.table}`);
+  if (report.spreadMs > 0) {
+    console.log(`• stems differ by ${report.spreadMs}ms; shorter stems will end early (common zero-start).`);
+  }
 
   // Build output tree
   const outRoot = join("dist", "songs", args.id);
@@ -89,6 +95,14 @@ async function main() {
     console.log("→ uploading to R2…");
     const dest = await uploadDir(outRoot, args.bucket, `songs/${args.id}`);
     console.log(`✔ uploaded to ${dest}`);
+
+    console.log("→ refreshing catalog…");
+    const catalog = await refreshCatalog({
+      listSongIds: () => listSongIds(args.bucket),
+      readManifest: (id) => readRemoteManifest(args.bucket, id),
+      writeCatalog: (c) => uploadJson(c, args.bucket, "catalog.json"),
+    });
+    console.log(`✔ catalog.json updated (${catalog.songs.length} songs)`);
   } else {
     console.log("• skipped upload (--no-upload)");
   }

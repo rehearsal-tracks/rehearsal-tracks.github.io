@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { probeDuration, segmentToHls, generateWaveform } from "../media.js";
 
-let dir, wav, m4a;
+let dir, wav, m4a, aiff;
 before(async () => {
   dir = await mkdtemp(join(tmpdir(), "media-test-"));
   wav = join(dir, "tone.wav");
@@ -16,6 +16,9 @@ before(async () => {
   // ffmpeg-decode-to-wav path in generateWaveform.
   m4a = join(dir, "tone.m4a");
   execFileSync("ffmpeg", ["-y", "-i", wav, "-c:a", "aac", m4a]);
+  // an AIFF copy — verifies #6 (AIFF support) end-to-end through the same path.
+  aiff = join(dir, "tone.aiff");
+  execFileSync("ffmpeg", ["-y", "-i", wav, aiff]);
 });
 after(async () => { await rm(dir, { recursive: true, force: true }); });
 
@@ -43,6 +46,13 @@ test("generateWaveform writes parseable JSON", async () => {
 test("generateWaveform handles m4a/AAC (which audiowaveform can't read directly)", async () => {
   const wf = join(dir, "waveform-m4a.json");
   await generateWaveform(m4a, wf);
+  const parsed = JSON.parse(await readFile(wf, "utf8"));
+  assert.ok(Array.isArray(parsed.data) && parsed.data.length > 0);
+});
+
+test("generateWaveform handles AIFF (verifies #6, no code change needed)", async () => {
+  const wf = join(dir, "waveform-aiff.json");
+  await generateWaveform(aiff, wf);
   const parsed = JSON.parse(await readFile(wf, "utf8"));
   assert.ok(Array.isArray(parsed.data) && parsed.data.length > 0);
 });
