@@ -25,7 +25,8 @@ test("segmentToHls writes a playlist and at least one segment", async () => {
   await segmentToHls(wav, out, "128k");
   const playlist = await readFile(join(out, "audio.m3u8"), "utf8");
   assert.match(playlist, /#EXTM3U/);
-  await access(join(out, "seg_000.ts")); // throws if missing
+  assert.match(playlist, /seg_000\.mp3/); // playlist references MP3 segments
+  await access(join(out, "seg_000.mp3")); // throws if missing
 });
 
 test("generateWaveform writes parseable JSON", async () => {

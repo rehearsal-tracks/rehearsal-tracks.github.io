@@ -52,7 +52,7 @@ After the CLI exists, upload the fixture and confirm public reads work:
 ```bash
 node scripts/segment-song.js <fixture-dir> --id=fixture --title="Fixture" --artist="Test" --bucket=stem-player
 curl -sI "https://<pub-url>/songs/fixture/manifest.json" | grep -i "200\|content-type"
-curl -sI -H "Range: bytes=0-1" "https://<pub-url>/songs/fixture/lead/seg_000.ts" | grep -i "206\|content-range"
+curl -sI -H "Range: bytes=0-1" "https://<pub-url>/songs/fixture/lead/seg_000.mp3" | grep -i "206\|content-range"
 ```
 
 Expected: manifest returns `200`; segment returns `206 Partial Content`

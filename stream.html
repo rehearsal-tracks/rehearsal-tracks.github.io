@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Stem Player — Stream</title>
+  <script type="module">
+    import "https://esm.sh/@stemplayer-js/stemplayer-js/element.js";
+  </script>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0d0f1a; color: #eef0f8; margin: 0; padding: 24px; }
+    #status { background: #3a1d2a; padding: 12px; border-radius: 8px; }
+    h1 { margin: 0; font-size: 24px; }
+    p.artist { color: #9aa0c0; margin: 4px 0 20px; }
+  </style>
+</head>
+<body>
+  <h1 id="title">Loading…</h1>
+  <p class="artist" id="artist"></p>
+  <p id="status" hidden></p>
+  <div id="player"></div>
+  <script type="module" src="js/stream.js"></script>
+</body>
+</html>
