@@ -3,58 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Stem Player</title>
-  <meta name="description" content="An interactive stem player — mix the track yourself, right in your browser." />
+  <title>Rehearsal Tracks</title>
+  <meta name="description" content="Mix the track yourself — interactive stems, right in your browser." />
   <meta name="theme-color" content="#0d0f1a" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-  <main class="player" aria-live="polite">
-    <header class="player__header">
-      <div class="player__titles">
-        <p class="player__eyebrow">Interactive Stem Player</p>
-        <h1 class="player__title" id="track-title">Loading…</h1>
-        <p class="player__artist" id="track-artist"></p>
-      </div>
-      <label class="track-select" hidden id="track-select-wrap">
-        <span class="track-select__label">Track</span>
-        <select id="track-select" aria-label="Choose a track"></select>
-      </label>
+  <div id="nav-root"></div>
+
+  <main class="landing" aria-live="polite">
+    <header class="landing__header">
+      <p class="player__eyebrow">Interactive Stem Player</p>
+      <h1 class="landing__title">Rehearsal Tracks</h1>
+      <p class="landing__sub">Pick a song, then mix the stems yourself — your mix stays private to this browser.</p>
     </header>
 
-    <section class="transport" aria-label="Playback controls">
-      <button class="transport__play" id="play-btn" disabled aria-label="Play">
-        <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-        <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
-      </button>
-
-      <div class="transport__timeline">
-        <input type="range" id="seek" class="seek" min="0" max="1000" value="0" step="1" aria-label="Seek" disabled />
-        <div class="transport__time">
-          <span id="time-current">0:00</span>
-          <span id="time-total">0:00</span>
-        </div>
-      </div>
-
-      <button class="transport__loop is-on" id="loop-btn" aria-pressed="true" title="Loop">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1l4 4-4 4V6H7a4 4 0 00-4 4H1a6 6 0 016-6h10V1zM7 23l-4-4 4-4v3h10a4 4 0 004-4h2a6 6 0 01-6 6H7v3z"/></svg>
-      </button>
-    </section>
-
-    <section class="stems" id="stems" aria-label="Stem mixer"></section>
-
-    <section class="master">
-      <span class="master__label" aria-hidden="true">MASTER</span>
-      <input type="range" id="master-vol" class="slider slider--master" min="0" max="100" value="90" aria-label="Master volume" />
-      <span class="master__value" id="master-vol-value">90</span>
-    </section>
-
-    <p class="player__hint" id="hint">Your mix is private to this browser — drag the sliders to make it yours.</p>
+    <div id="song-list" class="song-list"></div>
   </main>
 
-  <div class="loading" id="loading"><div class="loading__spinner"></div><p>Loading stems…</p></div>
-
-  <script type="module" src="js/player.js"></script>
+  <script type="module" src="js/landing.js"></script>
 </body>
 </html>
