@@ -1,5 +1,6 @@
 // js/stream.js — load a song manifest from R2 and render stemplayer-js stems.
 import { R2_BASE } from "./config.js";
+import { initNav } from "./nav.js";
 
 const params = new URLSearchParams(location.search);
 const songId = params.get("song");
@@ -9,6 +10,7 @@ const playerEl = document.getElementById("player");
 function showError(msg) { statusEl.textContent = msg; statusEl.hidden = false; }
 
 async function main() {
+  initNav({ currentSongId: songId });
   if (!songId) return showError("No ?song=<id> specified.");
   const base = `${R2_BASE}/songs/${songId}`;
   let manifest;
