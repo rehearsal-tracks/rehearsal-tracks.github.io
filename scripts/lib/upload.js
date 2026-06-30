@@ -11,7 +11,9 @@ const pexec = promisify(execFile);
 export function uploadDir(localDir, bucket, remotePrefix) {
   const dest = `r2:${bucket}/${remotePrefix}`;
   return new Promise((resolve, reject) => {
-    const proc = spawn("rclone", ["copy", localDir, dest, "--progress"], { stdio: "inherit" });
+    // --s3-no-check-bucket: bucket-scoped R2 tokens can't CreateBucket, and rclone
+    // otherwise attempts a bucket check/create that returns 403 AccessDenied.
+    const proc = spawn("rclone", ["copy", localDir, dest, "--s3-no-check-bucket", "--progress"], { stdio: "inherit" });
     proc.on("error", reject);
     proc.on("close", (code) =>
       code === 0 ? resolve(dest) : reject(new Error(`rclone exited with code ${code}`)));
@@ -36,7 +38,9 @@ export async function uploadJson(obj, bucket, remotePath) {
   const local = join(tmp, "file.json");
   try {
     await writeFile(local, JSON.stringify(obj, null, 2));
-    await pexec("rclone", ["copyto", local, `r2:${bucket}/${remotePath}`]);
+    // --s3-no-check-bucket: see uploadDir — avoids a 403 CreateBucket attempt on
+    // bucket-scoped R2 tokens (this copyto targets the bucket root).
+    await pexec("rclone", ["copyto", local, `r2:${bucket}/${remotePath}`, "--s3-no-check-bucket"]);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
