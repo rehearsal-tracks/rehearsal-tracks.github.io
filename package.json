@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "segment": "node scripts/segment-song.js"
+    "segment": "node scripts/segment-song.js",
+    "admin": "node scripts/admin-server.js"
   },
   "engines": { "node": ">=18" }
 }
