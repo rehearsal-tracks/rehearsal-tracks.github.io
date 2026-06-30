@@ -99,6 +99,30 @@ node scripts/refresh-catalog.js          # [--bucket=stem-player]
 
 ---
 
+## Admin tool (local web UI)
+
+For day-to-day curation there's a small localhost web app that wraps the same
+pipeline — add songs, edit title/artist, drag-reorder stems, and add / rename /
+delete individual stems, all writing straight to R2.
+
+```bash
+npm run admin            # → http://127.0.0.1:4321  [--port=4321] [--bucket=stem-player]
+```
+
+- **Add a song:** drop a folder's audio files onto the page, fill in title/artist,
+  and it segments + uploads + refreshes the catalog (same as `segment-song.js`).
+- **Edit:** change title/artist, drag the ☰ handle to reorder stems (no
+  re-encoding), rename a stem's label inline, delete a stem, or drop one file to
+  add a stem.
+- **Delete:** removes the song (or stem) from R2 and refreshes the catalog.
+
+**Security model:** the server binds to `127.0.0.1` only and is the *one* component
+that touches R2 credentials — exactly like the CLI. There is no login because the
+gate is already possession of the local `rclone` creds. Nothing here ships to the
+public site; the deployed pages stay read-only and secret-free.
+
+---
+
 ## Run it locally
 
 The front-end fetches from R2 over HTTP, which browsers block from `file://`.
@@ -130,8 +154,9 @@ by `rclone` during uploads.
 
 ## Tests
 
-Pure logic (slug/ordering, length report, manifest, catalog view helpers) is unit
-tested with Node's built-in runner; rclone/R2 I/O is verified manually.
+Pure logic (slug/ordering, length report, manifest, catalog view helpers, manifest
+transforms, path guards) is unit tested with Node's built-in runner; rclone/R2/HTTP
+I/O is verified manually.
 
 ```bash
 npm test
@@ -155,8 +180,9 @@ the same link hear whatever *they* set — the link is shared, the mix is not.
 | `stream.html`, `js/stream.js` | Player page (one song via `stemplayer-js`) |
 | `js/nav.js`, `js/data.js`, `js/lib/` | Shared nav drawer, R2 fetches, pure view helpers |
 | `css/styles.css` | Dark design system (shared by both pages) |
-| `scripts/segment-song.js` | Encode + upload one song; refresh catalog |
+| `scripts/segment-song.js` | CLI: encode + upload one song; refresh catalog |
 | `scripts/refresh-catalog.js` | Rebuild `catalog.json` from R2 |
-| `scripts/lib/` | Pipeline modules (media, manifest, catalog, ordering, upload) |
+| `scripts/admin-server.js`, `scripts/admin/public/` | Local admin web UI (`npm run admin`) |
+| `scripts/lib/` | Pipeline modules (media, manifest, catalog, ordering, segment, upload, manifest-ops, safe-path) |
 | `docs/R2-SETUP.md` | One-time Cloudflare R2 setup runbook |
 | `legacy/` | The original v0 whole-file player, retired |
