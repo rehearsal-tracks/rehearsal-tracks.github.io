@@ -18,9 +18,18 @@ test("builds manifest matching schema v1", () => {
   assert.deepEqual(m.stems[0], {
     name: "Lead Vocal",
     slug: "lead-vocal",
+    seconds: 612.4,
     src: "lead-vocal/audio.m3u8",
     waveform: "lead-vocal/waveform.json",
   });
+});
+
+test("persists seconds on every stem (needed for later edits)", () => {
+  const m = buildManifest({
+    id: "x", title: "X", artist: "Y",
+    stems: [{ name: "Bass", slug: "bass", seconds: 180.5 }],
+  });
+  assert.equal(m.stems[0].seconds, 180.5);
 });
 
 test("durationSeconds is the max even when the longest stem is not first", () => {

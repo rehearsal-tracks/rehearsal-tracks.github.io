@@ -8,6 +8,7 @@ export function buildManifest({ id, title, artist, stems }) {
     stems: stems.map((s) => ({
       name: s.name,
       slug: s.slug,
+      seconds: s.seconds,
       src: `${s.slug}/audio.m3u8`,
       waveform: `${s.slug}/waveform.json`,
     })),
