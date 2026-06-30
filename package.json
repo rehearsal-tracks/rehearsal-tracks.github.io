@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test",
     "segment": "node scripts/segment-song.js",
-    "admin": "node scripts/admin-server.js"
+    "admin": "node scripts/admin-server.js",
+    "serve": "python3 -m http.server 8000"
   },
   "engines": { "node": ">=18" }
 }

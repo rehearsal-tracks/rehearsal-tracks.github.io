@@ -129,11 +129,13 @@ The front-end fetches from R2 over HTTP, which browsers block from `file://`.
 Serve the folder:
 
 ```bash
-python3 -m http.server 8000
-# open http://localhost:8000
+npm run serve            # python3 -m http.server 8000 → http://localhost:8000
 ```
 
 `http://localhost:8000` is already in the R2 CORS allow-list (see the runbook).
+The pages read live from R2 (`R2_BASE` in `js/config.js`), so the local site
+always reflects whatever is in the bucket — no sync step. Run it alongside
+`npm run admin` and reload after an edit to see your changes.
 
 ---
 
