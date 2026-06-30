@@ -45,3 +45,29 @@ export async function uploadJson(obj, bucket, remotePath) {
     await rm(tmp, { recursive: true, force: true });
   }
 }
+
+// Purge a whole song's R2 tree. Tolerates an already-absent path (idempotent delete).
+export async function deleteRemoteSong(bucket, id) {
+  await purgeTolerant(`r2:${bucket}/songs/${id}`);
+}
+
+// Purge a single stem's R2 dir. Tolerates an already-absent path.
+export async function deleteRemoteStem(bucket, id, slug) {
+  await purgeTolerant(`r2:${bucket}/songs/${id}/${slug}`);
+}
+
+// Re-upload a manifest object to songs/<id>/manifest.json (used by edit/reorder/rename/delete-stem).
+export async function updateRemoteManifest(bucket, id, manifest) {
+  await uploadJson(manifest, bucket, `songs/${id}/manifest.json`);
+}
+
+async function purgeTolerant(remote) {
+  try {
+    await pexec("rclone", ["purge", remote, "--s3-no-check-bucket"]);
+  } catch (e) {
+    // rclone exits non-zero when the directory doesn't exist; treat "not found" as success.
+    const msg = `${e.stderr || ""}${e.message || ""}`.toLowerCase();
+    if (msg.includes("not found") || msg.includes("doesn't exist") || msg.includes("directory not found")) return;
+    throw e;
+  }
+}
