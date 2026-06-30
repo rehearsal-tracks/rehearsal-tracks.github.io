@@ -1,8 +1,9 @@
 # R2 Setup Runbook
 
 One-time operator setup for the Cloudflare R2 bucket that stores stem audio
-(HLS segments + waveform JSON + per-song `manifest.json`). After this, the
-`segment-song.js` CLI handles all uploads automatically.
+(HLS segments + waveform JSON + per-song `manifest.json`, plus a `catalog.json`
+index at the bucket root). After this, the `segment-song.js` CLI handles all
+uploads automatically.
 
 ## 1. Create the bucket
 
@@ -44,6 +45,14 @@ One-time operator setup for the Cloudflare R2 bucket that stores stem audio
    Verify with `rclone ls r2:stem-player` (empty output, no error = success).
    Note: `rclone lsd r2:` returns 403 with a bucket-scoped token — that is
    expected and correct; the token cannot list all account buckets.
+
+   **Bucket-scoped tokens and `--s3-no-check-bucket`.** A bucket-scoped token
+   cannot `CreateBucket`. By default rclone tries to check/create the destination
+   bucket before writing, which returns `403 AccessDenied` (most visibly on writes
+   to the bucket root, like `catalog.json`). The CLI passes `--s3-no-check-bucket`
+   on every upload to skip that check, so no config change is required. If you run
+   `rclone` by hand against this bucket, add the same flag, e.g.
+   `rclone cat r2:stem-player/catalog.json --s3-no-check-bucket`.
 
 ## 5. Verify upload + public-read round-trip
 
