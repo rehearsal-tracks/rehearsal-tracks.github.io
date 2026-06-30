@@ -1,2 +1,46 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Stem Admin</title></head>
-<body><h1>Stem Admin</h1><p>booting…</p></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stem Admin</title>
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+  <header class="admin-top">
+    <h1 class="admin-top__title">Stem Admin</h1>
+    <span class="admin-top__hint">localhost · writes straight to R2</span>
+  </header>
+
+  <main class="admin">
+    <p id="banner" class="banner" hidden></p>
+
+    <section class="panel">
+      <h2 class="panel__h">Add a song</h2>
+      <div id="dropzone" class="dropzone" tabindex="0">
+        <p>Drop a folder's audio files here</p>
+        <p class="dropzone__sub">wav · mp3 · flac · aiff · m4a — number-prefix filenames (<code>01-…</code>) to set order</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head">
+        <h2 class="panel__h">Songs</h2>
+        <button id="reload" class="btn btn--ghost" type="button">Reload</button>
+      </div>
+      <div id="song-list" class="song-rows"><p class="muted">Loading…</p></div>
+    </section>
+
+    <section id="edit-panel" class="panel" hidden></section>
+  </main>
+
+  <div id="overlay" class="overlay" hidden>
+    <div class="overlay__box">
+      <div class="overlay__spinner"></div>
+      <p id="overlay-msg">Working…</p>
+    </div>
+  </div>
+
+  <script type="module" src="admin.js"></script>
+</body>
+</html>
