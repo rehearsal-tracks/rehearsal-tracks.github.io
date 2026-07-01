@@ -27,21 +27,79 @@ body {
   color: var(--text);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   display: grid;
+  /* minmax(0, 1fr), not the default `auto` track: an auto track sizes to the child's
+     max-content, so when the player is in its wide waveform layout the card keeps that large
+     width and overflows a narrower viewport instead of shrinking — which meant a shrink never
+     changed the player's width and the layout never re-rendered back to the compact view.
+     minmax(0,...) lets the column (and the child) shrink below content width. */
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
-  padding: clamp(16px, 4vw, 48px);
+  padding: clamp(8px, 2.5vw, 48px);
   -webkit-font-smoothing: antialiased;
 }
 
 .player {
   width: 100%;
-  max-width: 540px;
+  /* Cap at ~1200px so the player component gets enough width to render its rich
+     layout (per-stem waveforms + visible volume sliders); stemplayer-js chooses its
+     layout from its own rendered width, so a narrow cap traps every screen in the
+     cramped no-waveform layout. Fluid (100%) below that on tablet/phone. */
+  max-width: min(1200px, 100%);
+  /* Override the default min-width:auto (= min-content) so the card can shrink below the
+     wide layout's intrinsic width when the viewport narrows; see the body grid comment. */
+  min-width: 0;
   background: linear-gradient(180deg, rgba(30, 36, 64, 0.7), rgba(22, 26, 44, 0.85));
   border: 1px solid var(--line);
   border-radius: calc(var(--radius) + 6px);
-  padding: clamp(20px, 4vw, 32px);
+  padding: clamp(8px, 2.5vw, 32px);
   box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(12px);
 }
+
+/* Theme the stemplayer-js web component onto our palette. It exposes no ::part(); these
+   --stemplayer-js-* / --fc-* custom properties are inherited into its shadow DOM (verified
+   against the component's own shadow stylesheets — waveform color is NOT a variable, it's set
+   per-stem via wave-color / wave-progress-color attributes in js/stream.js). All four
+   background vars are set to the same value so the component reads as one uniform dark inset
+   panel with no two-tone seam between its control column and waveform area. */
+stemplayer-js {
+  --stemplayer-js-color: var(--text);
+  --stemplayer-js-brand-color: var(--accent);
+  --stemplayer-js-stem-color: var(--accent);
+  --stemplayer-js-background-color: var(--bg);
+  --stemplayer-js-controls-background-color: var(--bg);
+  --stemplayer-js-row-controls-background-color: var(--bg);
+  --stemplayer-js-row-end-background-color: var(--bg);
+  --fc-range-border-color: var(--line);
+}
+
+/* Narrow-width layout: hide stemplayer-js's own compact stem rows (whose only volume affordance is
+   an ambiguous edge-fill) and show our own fader list instead — a clearly-labelled volume slider +
+   mute/solo per stem, built in js/stream.js and driving each native stem's public props. The native
+   <stemplayer-js-stem>s stay in the DOM (they own the audio + shared clock); only their rendering is
+   hidden. The controls row (transport/seek) stays visible in both layouts. #player.is-mobile is
+   toggled from js/stream.js by measured width (< the "lg" threshold). */
+/* The mobile list carries both .stems (display:flex) and .stems--mobile; scope the hide/show to
+   #player so it out-specifies .stems and only appears in the narrow (.is-mobile) layout. */
+#player .stems--mobile { display: none; margin-top: 20px; }
+#player.is-mobile .stems--mobile { display: flex; }
+#player.is-mobile stemplayer-js-stem { display: none; }
+
+/* Mobile mute/solo: the same mic / speaker(-slash) icons the wide layout renders, in the same
+   accent colour. Borderless icon buttons at rest; an active state fills a chip (red = muted,
+   blue = solo) for a clear touch affordance the tiny desktop controls don't need. */
+.stems--mobile .stem__btn { width: 34px; height: 30px; padding: 0; border: none; background: transparent; display: grid; place-items: center; }
+.stems--mobile .stem__btn svg { width: 20px; height: 20px; fill: var(--accent); transition: fill 0.15s; }
+.stems--mobile .stem__btn:hover svg { fill: var(--text); }
+.stems--mobile .stem__btn.is-active[data-role="mute"] { background: #e0526c; }
+.stems--mobile .stem__btn.is-active[data-role="solo"] { background: var(--accent); }
+.stems--mobile .stem__btn.is-active svg { fill: #fff; }
+
+/* Mobile volume slider styled like the component's wide-layout fader: a thin uniform track (no
+   coloured progress fill) with a light vertical "pill" thumb, rather than the round-thumb style. */
+.stems--mobile .slider { height: 4px; background: var(--line); }
+.stems--mobile .slider::-webkit-slider-thumb { width: 11px; height: 22px; border-radius: 5px; background: #cdd1e6; border: none; }
+.stems--mobile .slider::-moz-range-thumb { width: 11px; height: 22px; border-radius: 5px; background: #cdd1e6; border: none; }
 
 /* Header */
 .player__header {
@@ -51,6 +109,8 @@ body {
   gap: 16px;
   margin-bottom: 28px;
 }
+/* Keep the heading block from stretching across the full 1200px card width. */
+.player__titles { max-width: 60ch; }
 .player__eyebrow {
   margin: 0 0 6px;
   font-size: 11px;
@@ -204,7 +264,8 @@ body {
 .master__value { font-size: 12px; color: var(--text-dim); width: 26px; text-align: right; font-variant-numeric: tabular-nums; }
 
 .player__hint {
-  margin: 18px 0 0;
+  margin: 18px auto 0;
+  max-width: 60ch;
   text-align: center;
   font-size: 12.5px;
   color: var(--text-dim);
