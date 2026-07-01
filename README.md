@@ -141,16 +141,20 @@ always reflects whatever is in the bucket — no sync step. Run it alongside
 
 ## Deploy (GitHub Pages)
 
-Publishes straight from the `main` branch:
+This repo is an **org site**: it lives in the `rehearsal-tracks` org and is named
+`rehearsal-tracks.github.io`, so Pages serves it at the root of that subdomain.
 
-1. Push to GitHub.
+1. Push to GitHub (`main`).
 2. **Settings → Pages → Build and deployment → Source: Deploy from a branch**,
    branch `main`, folder `/ (root)`.
-3. Link: `https://andrew-bray.github.io/interactive-stem-player/`
+3. Link: **`https://rehearsal-tracks.github.io`**
 
-The empty `.nojekyll` file tells Pages to serve every file as-is. The deployed
-site is **read-only** and holds no secrets — R2 credentials stay local, used only
-by `rclone` during uploads.
+Because the repo is `<org>.github.io`, the site is served at the domain root — all
+in-page paths are relative, so nothing in the code hardcodes the URL. The empty
+`.nojekyll` file tells Pages to serve every file as-is. The deployed site is
+**read-only** and holds no secrets — R2 credentials stay local, used only by
+`rclone` during uploads. New origins must be added to the R2 CORS list (see
+`docs/R2-SETUP.md`).
 
 ---
 

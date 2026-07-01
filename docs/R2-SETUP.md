@@ -22,13 +22,14 @@ uploads automatically.
 3. Bucket → **Settings → CORS policy** → paste:
 
    ```json
-   [{ "AllowedOrigins": ["https://andrew-bray.github.io", "http://localhost:8000"],
+   [{ "AllowedOrigins": ["https://rehearsal-tracks.github.io", "http://localhost:8000"],
       "AllowedMethods": ["GET", "HEAD"],
       "AllowedHeaders": ["Range"],
       "ExposeHeaders": ["Content-Length", "Content-Range", "Accept-Ranges"] }]
    ```
 
-   - `AllowedOrigins` — the GitHub Pages site and the local dev server.
+   - `AllowedOrigins` — the GitHub Pages site (`rehearsal-tracks.github.io`) and
+     the local dev server. Add any new origin here or its R2 fetches are blocked.
    - `AllowedHeaders: Range` + `ExposeHeaders` — required for HLS streaming
      (the player fetches partial byte ranges of each segment rather than whole
      files).
