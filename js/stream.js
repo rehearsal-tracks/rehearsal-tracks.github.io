@@ -43,21 +43,68 @@ async function main() {
   const mobileStems = document.createElement("div");
   mobileStems.className = "stems stems--mobile";
 
+  // Per-visit mix (volume + mute/solo per stem) is remembered in localStorage, keyed per song and
+  // per stem's stable storage slug (stem.src), so it survives reloads and stem reordering. Restore
+  // the saved values onto the stem props here (before building the mobile rows, so their initial UI
+  // reflects the restored state); changes are written back by the delegated listeners below.
+  const savedMix = readSavedMix(songId);
+  // Stem `volume` reads 0 WHILE muted (it reports effective gain, not the set level), so we can't
+  // recover a muted stem's real level from the prop. Track the last audible level per stem and
+  // persist that instead, so unmuting later restores the right volume.
+  const lastVolume = {};
+
   for (const stem of manifest.stems) {
     const el = document.createElement("stemplayer-js-stem");
     el.setAttribute("label", stem.name);
     el.setAttribute("src", `${base}/${stem.src}`);
     el.setAttribute("waveform", `${base}/${stem.waveform}`);
+    el.dataset.stemKey = stem.src;
     // Waveform color isn't a CSS custom property — it's set per stem. Dim unplayed bars, accent
     // for the played portion, to match the site palette (--text-dim / --accent) and read as progress.
     el.setAttribute("wave-color", "#5b6291");
     el.setAttribute("wave-progress-color", "#6c8cff");
+    const s = savedMix[stem.src] || {};
+    const vol = typeof s.volume === "number" ? s.volume : 1;
+    lastVolume[stem.src] = vol;
+    el.volume = vol;                 // set the level first, then mute (mute would zero the getter)
+    if (s.muted) el.muted = true;
+    if (s.solo) el.solo = "on";
     player.appendChild(el);
     el.addEventListener("error", () => showError(`Stem "${stem.name}" failed to load (others continue).`));
-    mobileStems.appendChild(buildMobileStemRow(el, stem.name));
+    // Pass explicit init state (not el.volume, which is 0 when muted) so the row shows the true level.
+    mobileStems.appendChild(buildMobileStemRow(el, stem.name, { volume: vol, muted: !!s.muted, solo: !!s.solo }));
   }
   playerEl.appendChild(player);
   playerEl.appendChild(mobileStems);
+
+  // Persist the mix on any change. Delegated on the #player container so it captures BOTH our mobile
+  // fader rows (native <input>/<button> in light DOM) and the component's own wide-layout controls
+  // (its native range 'input' and button 'click' are composed events that bubble out of the shadow
+  // DOM). Capture each audible stem's level synchronously on every volume 'input' (the stem isn't
+  // muted yet at that instant) so a later mute keeps the real level; the localStorage write itself
+  // is debounced so a volume drag coalesces into one write.
+  const captureAudibleVolumes = () => {
+    for (const el of player.querySelectorAll("stemplayer-js-stem")) {
+      if (el.dataset.stemKey && !el.muted) lastVolume[el.dataset.stemKey] = el.volume;
+    }
+  };
+  const persist = debounce(() => saveMix(songId, player, lastVolume), 300);
+  playerEl.addEventListener("input", () => { captureAudibleVolumes(); persist(); });
+  playerEl.addEventListener("click", persist);
+
+  // Restoring solo needs to happen AFTER the component's first render: unlike volume/muted (which
+  // stick when set at creation), the stem resets `solo` to "off" during init. Re-apply the saved
+  // solo once the stem's first update settles, and again on loading-end as a belt-and-braces guard
+  // (both run before any user interaction, so they can't clobber a live change).
+  const restoreSolo = () => {
+    for (const el of player.querySelectorAll("stemplayer-js-stem")) {
+      if (savedMix[el.dataset.stemKey]?.solo && el.solo !== "on") el.solo = "on";
+    }
+  };
+  for (const el of player.querySelectorAll("stemplayer-js-stem")) {
+    if (el.updateComplete) el.updateComplete.then(restoreSolo);
+  }
+  player.addEventListener("loading-end", restoreSolo);
 
   // stemplayer-js computes its waveform pixel-width only on a resize/layout event.
   // When the player is built programmatically, the initial recalc can run before the
@@ -123,7 +170,7 @@ const ICON = {
 // layout: same mute/solo icons, and a slider styled like the component's (thin track, pill thumb).
 // muted/solo are the same props the component's own buttons set (solo takes the strings
 // "on"/"off"), so audio behaviour is identical.
-function buildMobileStemRow(stem, name) {
+function buildMobileStemRow(stem, name, init) {
   const row = document.createElement("div");
   row.className = "stem";
 
@@ -163,28 +210,77 @@ function buildMobileStemRow(stem, name) {
   const val = document.createElement("span");
   val.className = "stem__vol";
   const paint = () => { val.textContent = `${Math.round(Number(slider.value) * 100)}`; };
-  paint();
   slider.addEventListener("input", () => {
     stem.volume = Number(slider.value);
     paint();
   });
   bottom.append(slider, val);
 
-  muteBtn.addEventListener("click", () => {
-    const muted = !stem.muted;
-    stem.muted = muted;
+  // Reflect a mute/solo state in the row UI. Called both when toggled and on init (to show state
+  // restored from localStorage), so the row always matches the stem's actual props.
+  const showMute = (muted) => {
     muteBtn.innerHTML = muted ? ICON.muted : ICON.mute;
     muteBtn.classList.toggle("is-active", muted);
     row.classList.toggle("is-muted", muted);
+  };
+  const showSolo = (on) => soloBtn.classList.toggle("is-active", on);
+
+  muteBtn.addEventListener("click", () => {
+    const muted = !stem.muted;
+    stem.muted = muted;
+    showMute(muted);
   });
   soloBtn.addEventListener("click", () => {
     const on = stem.solo !== "on";
     stem.solo = on ? "on" : "off";
-    soloBtn.classList.toggle("is-active", on);
+    showSolo(on);
   });
+
+  // Initialise from the explicit init state (a saved mix may have set the stem muted, in which case
+  // stem.volume reads 0 — so we take the true level from init, not the prop).
+  slider.value = String(init.volume);
+  paint();
+  showMute(init.muted);
+  showSolo(init.solo);
 
   row.append(top, bottom);
   return row;
+}
+
+// ── Saved mix persistence (localStorage) ─────────────────────────────────────────────────────
+// One entry per song; within it, one record per stem keyed by its stable storage slug (stem.src).
+const mixKey = (songId) => `rehearsal-tracks:mix:v1:${songId}`;
+
+function readSavedMix(songId) {
+  try {
+    return JSON.parse(localStorage.getItem(mixKey(songId)) || "{}") || {};
+  } catch {
+    return {}; // corrupt/unavailable storage (e.g. private mode) → start fresh
+  }
+}
+
+function saveMix(songId, player, lastVolume) {
+  const mix = {};
+  for (const el of player.querySelectorAll("stemplayer-js-stem")) {
+    const key = el.dataset.stemKey;
+    if (!key) continue;
+    // el.volume reports 0 while muted, so only refresh the remembered level when audible; a muted
+    // stem keeps its last audible level so unmuting later restores it.
+    if (!el.muted) lastVolume[key] = el.volume;
+    mix[key] = {
+      volume: key in lastVolume ? lastVolume[key] : el.volume,
+      muted: !!el.muted,
+      solo: el.solo === "on",
+    };
+  }
+  try {
+    localStorage.setItem(mixKey(songId), JSON.stringify(mix));
+  } catch { /* storage full or disabled — a non-persisted mix still works for this visit */ }
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
 main();
