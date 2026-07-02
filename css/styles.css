@@ -45,12 +45,13 @@ body {
 /* The toxic/fire/lightning corner glows, on a fixed layer behind all content so only they pulse
    (the content above stays crisp). It slowly breathes — opacity + a hair of scale — to read as a
    radioactive glow. position:fixed pulls it out of the body's grid flow so it doesn't affect
-   centering; z-index:-1 keeps it behind everything (the nav/card sit above it). */
+   centering; z-index:-2 keeps it behind everything, INCLUDING the lava-lamp goo layer (z-index:-1)
+   which sits on top of these glows as the centrepiece while they frame it with fire/lightning. */
 body::before {
   content: "";
   position: fixed;
   inset: -10%;                 /* overscan so the scale-up never reveals a hard edge */
-  z-index: -1;
+  z-index: -2;
   pointer-events: none;
   background:
     /* purple lightning crackling from the top-right */
@@ -66,6 +67,33 @@ body::before {
 @keyframes edge-pulse {
   0%, 100% { opacity: 0.55; transform: scale(1); }
   50%      { opacity: 1;    transform: scale(1.06); }
+}
+
+/* The gooey "toxic waste" lava-lamp layer (built + animated in js/lava-lamp.js). Fixed, full
+   viewport, behind all content but in FRONT of the corner glows (z-index -1 vs -2). The canvas
+   holds the drifting colour blobs; the SVG #lava-goo filter merges them into liquid ooze and the
+   drop-shadow makes it glow (blur radius is driven by the audio level via --lava-glow). */
+#lava {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  --lava-glow: 16px;
+}
+#lava .lava-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+#lava-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* url(#lava-goo) does the merge; drop-shadow makes the merged ooze emissive (glows to the mix). */
+  filter: url(#lava-goo) drop-shadow(0 0 var(--lava-glow) rgba(139, 255, 31, 0.5));
+  opacity: 0.6;
 }
 
 .player {
