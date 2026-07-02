@@ -465,3 +465,41 @@ body { padding-top: 64px; }
   background: #3a1d2a; border: 1px solid #6e2a3e; color: #ffd9e2;
   padding: 14px 16px; border-radius: var(--radius); font-size: 14px;
 }
+
+/* ── PWA install affordance (js/sw-register.js) ──────────────────────────────────────────────
+   A subtle bottom-centered pill: an Install button on Android/desktop Chromium, or an Add-to-
+   Home-Screen hint on iOS Safari. Hidden entirely once the app runs standalone. */
+.install-banner {
+  position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex; align-items: center; gap: 12px;
+  max-width: calc(100% - 24px);
+  padding: 10px 12px 10px 16px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  box-shadow: 0 12px 30px -14px var(--accent-glow);
+  font-size: 14px; color: var(--text);
+  animation: install-banner-in 0.25s var(--ease, ease) both;
+}
+@keyframes install-banner-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.install-banner__hint { color: var(--text-dim); }
+.install-banner__hint strong { color: var(--text); font-weight: 600; }
+.install-banner__action {
+  appearance: none; cursor: pointer;
+  background: var(--accent); color: #07130a;
+  border: 0; border-radius: 999px;
+  padding: 8px 16px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em;
+}
+.install-banner__action:hover { filter: brightness(1.08); }
+.install-banner__close {
+  appearance: none; cursor: pointer;
+  background: transparent; border: 0; color: var(--text-dim);
+  font-size: 15px; line-height: 1; padding: 6px; border-radius: 50%;
+}
+.install-banner__close:hover { color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .install-banner { animation: none; } }

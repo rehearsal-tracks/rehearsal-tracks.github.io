@@ -6,6 +6,12 @@
   <title>Rehearsal Tracks — Player</title>
   <meta name="theme-color" content="#0a0e07" />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <!-- PWA: installable app shell -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Rehearsal" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&display=swap" />
@@ -34,5 +40,6 @@
   </main>
 
   <script type="module" src="js/stream.js"></script>
+  <script type="module" src="js/sw-register.js"></script>
 </body>
 </html>
