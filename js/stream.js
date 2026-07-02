@@ -1,6 +1,7 @@
 // js/stream.js — load a song manifest from R2 and render stemplayer-js stems.
 import { R2_BASE } from "./config.js";
 import { initNav } from "./nav.js";
+import { initPrefetch } from "./prefetch.js";
 
 const params = new URLSearchParams(location.search);
 const songId = params.get("song");
@@ -118,6 +119,13 @@ async function main() {
   }
   playerEl.appendChild(player);
   playerEl.appendChild(mobileStems);
+
+  // Anticipatory prefetch: warm the browser cache with segments further ahead than the engine's
+  // own ~10s window, so a slow segment on any one stem doesn't stall the whole mix. Component-
+  // agnostic (warms the cache the engine reads from) and wrapped so it can never break playback.
+  try {
+    initPrefetch({ player, base, stems: manifest.stems });
+  } catch { /* prefetch is a pure optimization — never let it interfere with playback */ }
 
   // Persist the mix on any change. Delegated on the #player container so it captures BOTH our mobile
   // fader rows (native <input>/<button> in light DOM) and the component's own wide-layout controls

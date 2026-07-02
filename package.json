@@ -7,6 +7,7 @@
     "test": "node --test",
     "segment": "node scripts/segment-song.js",
     "admin": "node scripts/admin-server.js",
+    "set-cache-headers": "node scripts/set-cache-headers.js",
     "serve": "python3 -m http.server 8000"
   },
   "engines": { "node": ">=18" }
