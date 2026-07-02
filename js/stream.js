@@ -9,6 +9,43 @@ const playerEl = document.getElementById("player");
 
 function showError(msg) { statusEl.textContent = msg; statusEl.hidden = false; }
 
+// Toxic Avenger waveform palette: murky-moss unplayed bars, toxic-green played portion (reads as
+// progress). Kept in sync with --accent in css/styles.css.
+const WAVE_COLOR = "#4f6b2e";
+const WAVE_PROGRESS_COLOR = "#8bff1f";
+
+// Find the first matching element anywhere in a shadow-DOM subtree, crossing shadow boundaries.
+function deepQuery(root, selector) {
+  if (!root) return null;
+  const direct = root.querySelector(selector);
+  if (direct) return direct;
+  for (const el of root.querySelectorAll("*")) {
+    if (el.shadowRoot) {
+      const found = deepQuery(el.shadowRoot, selector);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// Colour a stem's waveform. stemplayer-js 4.1.0-beta.4 doesn't pass the stem's wavecolor down to the
+// <fc-waveform> that actually paints the canvas, so we set that element's own observed attributes
+// (`wavecolor` / `progresscolor`) directly. We poll briefly for it: setting the colour BEFORE the
+// first paint (its peaks are fetched over the network, so there's a window) means the initial draw
+// uses our colour with no forced redraw. Bails out once applied, or after ~3s if the element never
+// appears (defensive — a missing waveform just keeps the component defaults).
+function themeWaveform(stem) {
+  let tries = 0;
+  const iv = setInterval(() => {
+    const fcw = stem.shadowRoot && deepQuery(stem.shadowRoot, "fc-waveform");
+    if (fcw) {
+      fcw.setAttribute("wavecolor", WAVE_COLOR);
+      fcw.setAttribute("progresscolor", WAVE_PROGRESS_COLOR);
+    }
+    if (fcw || ++tries > 60) clearInterval(iv);
+  }, 50);
+}
+
 async function main() {
   initNav({ currentSongId: songId });
   if (!songId) return showError("No ?song=<id> specified.");
@@ -59,10 +96,15 @@ async function main() {
     el.setAttribute("src", `${base}/${stem.src}`);
     el.setAttribute("waveform", `${base}/${stem.waveform}`);
     el.dataset.stemKey = stem.src;
-    // Waveform color isn't a CSS custom property — it's set per stem. Dim unplayed bars, accent
-    // for the played portion, to match the site palette (--text-dim / --accent) and read as progress.
-    el.setAttribute("wave-color", "#5b6291");
-    el.setAttribute("wave-progress-color", "#6c8cff");
+    // Waveform bars are drawn to a <canvas>, so their colour can't come from CSS. We set it in two
+    // ways for robustness: (1) the stem's own `wavecolor` / `waveprogresscolor` attributes (lowercase,
+    // NO hyphens — those are its observedAttributes), and (2) directly on the inner <fc-waveform> via
+    // themeWaveform() below, because stemplayer-js 4.1.0-beta.4 reflects these to stem properties but
+    // does NOT forward them to the child that actually paints — so without (2) the waveforms fall back
+    // to the component defaults (grey bars + cyan progress, which clashes with the theme).
+    el.setAttribute("wavecolor", WAVE_COLOR);
+    el.setAttribute("waveprogresscolor", WAVE_PROGRESS_COLOR);
+    themeWaveform(el);
     const s = savedMix[stem.src] || {};
     const vol = typeof s.volume === "number" ? s.volume : 1;
     lastVolume[stem.src] = vol;

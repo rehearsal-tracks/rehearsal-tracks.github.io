@@ -1,15 +1,20 @@
 :root {
-  --bg: #0d0f1a;
-  --bg-elev: #161a2c;
-  --bg-elev-2: #1e2440;
-  --line: #2a3052;
-  --text: #eef0f8;
-  --text-dim: #9aa0c0;
-  --accent: #6c8cff;
-  --accent-2: #b06cff;
-  --accent-glow: rgba(108, 140, 255, 0.45);
+  /* THE TOXIC AVENGER theme: radioactive lime green + molten-orange fire horizon +
+     purple lightning, on a near-black green-tinted sky. */
+  --bg: #0a0e07;
+  --bg-elev: #12180d;
+  --bg-elev-2: #1b2411;
+  --line: #384720;
+  --text: #edf4e2;
+  --text-dim: #a0b389;
+  --accent: #8bff1f;        /* toxic lime — interactive / volume */
+  --accent-2: #ff6a1a;      /* molten orange — seek / progress / fire glow */
+  --accent-3: #a855f7;      /* lightning purple — accent glows */
+  --accent-glow: rgba(139, 255, 31, 0.5);
   --radius: 16px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Heavy condensed display face for the poster-style headlines. */
+  --font-display: "Anton", "Impact", ui-sans-serif, system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -20,10 +25,9 @@ html, body {
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(176, 108, 255, 0.18), transparent 60%),
-    radial-gradient(1000px 700px at -10% 110%, rgba(108, 140, 255, 0.16), transparent 55%),
-    var(--bg);
+  /* Solid base only — the coloured corner glows live on body::before so they can pulse
+     independently (you can't animate the opacity of a background layer directly). */
+  background: var(--bg);
   color: var(--text);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   display: grid;
@@ -38,6 +42,32 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* The toxic/fire/lightning corner glows, on a fixed layer behind all content so only they pulse
+   (the content above stays crisp). It slowly breathes — opacity + a hair of scale — to read as a
+   radioactive glow. position:fixed pulls it out of the body's grid flow so it doesn't affect
+   centering; z-index:-1 keeps it behind everything (the nav/card sit above it). */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -10%;                 /* overscan so the scale-up never reveals a hard edge */
+  z-index: -1;
+  pointer-events: none;
+  background:
+    /* purple lightning crackling from the top-right */
+    radial-gradient(1250px 660px at 82% -12%, rgba(168, 85, 247, 0.34), transparent 62%),
+    /* molten fire glow rising off the horizon, bottom-left */
+    radial-gradient(1150px 800px at 12% 118%, rgba(255, 106, 26, 0.38), transparent 58%),
+    /* toxic-green haze seeping up from the bottom-right */
+    radial-gradient(950px 660px at 92% 112%, rgba(139, 255, 31, 0.28), transparent 58%);
+  animation: edge-pulse 2.5s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+@keyframes edge-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.06); }
+}
+
 .player {
   width: 100%;
   /* Cap at ~1200px so the player component gets enough width to render its rich
@@ -48,11 +78,14 @@ body {
   /* Override the default min-width:auto (= min-content) so the card can shrink below the
      wide layout's intrinsic width when the viewport narrows; see the body grid comment. */
   min-width: 0;
-  background: linear-gradient(180deg, rgba(30, 36, 64, 0.7), rgba(22, 26, 44, 0.85));
+  background:
+    /* lightning-purple wash bleeding in from the top-right, echoing the page's purple corner glow */
+    radial-gradient(130% 115% at 100% 0%, rgba(168, 85, 247, 0.28), transparent 58%),
+    linear-gradient(180deg, rgba(28, 40, 18, 0.72), rgba(16, 22, 12, 0.88));
   border: 1px solid var(--line);
   border-radius: calc(var(--radius) + 6px);
   padding: clamp(8px, 2.5vw, 32px);
-  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(139, 255, 31, 0.10);
   backdrop-filter: blur(12px);
 }
 
@@ -98,8 +131,8 @@ stemplayer-js {
 /* Mobile volume slider styled like the component's wide-layout fader: a thin uniform track (no
    coloured progress fill) with a light vertical "pill" thumb, rather than the round-thumb style. */
 .stems--mobile .slider { height: 4px; background: var(--line); }
-.stems--mobile .slider::-webkit-slider-thumb { width: 11px; height: 22px; border-radius: 5px; background: #cdd1e6; border: none; }
-.stems--mobile .slider::-moz-range-thumb { width: 11px; height: 22px; border-radius: 5px; background: #cdd1e6; border: none; }
+.stems--mobile .slider::-webkit-slider-thumb { width: 11px; height: 22px; border-radius: 5px; background: #d8ffb0; border: none; }
+.stems--mobile .slider::-moz-range-thumb { width: 11px; height: 22px; border-radius: 5px; background: #d8ffb0; border: none; }
 
 /* Header */
 .player__header {
@@ -121,10 +154,14 @@ stemplayer-js {
 }
 .player__title {
   margin: 0;
-  font-size: clamp(22px, 6vw, 30px);
-  line-height: 1.1;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 7vw, 38px);
+  line-height: 1.05;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-shadow: 0 0 18px var(--accent-glow), 0 2px 0 rgba(0, 0, 0, 0.5);
 }
 .player__artist {
   margin: 6px 0 0;
@@ -192,7 +229,7 @@ stemplayer-js {
   transition: color 0.2s, border-color 0.2s, background 0.2s;
 }
 .transport__loop svg { width: 18px; height: 18px; fill: currentColor; }
-.transport__loop.is-on { color: var(--accent); border-color: var(--accent); background: rgba(108, 140, 255, 0.12); }
+.transport__loop.is-on { color: var(--accent); border-color: var(--accent); background: rgba(139, 255, 31, 0.12); }
 
 /* Stems */
 .stems { display: flex; flex-direction: column; gap: 14px; margin-bottom: 24px; }
@@ -290,6 +327,8 @@ stemplayer-js {
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+  /* Don't flicker the glow at 0.001s/loop — hold it steady at a pleasant mid-brightness instead. */
+  body::before { animation: none !important; opacity: 0.75; transform: none; }
 }
 
 /* ============================================================
@@ -311,9 +350,10 @@ body { padding-top: 64px; }
 }
 .site-nav__brand {
   color: var(--text); text-decoration: none;
-  font-weight: 700; letter-spacing: -0.01em; font-size: 15px;
+  font-family: var(--font-display); font-weight: 400;
+  letter-spacing: 0.04em; font-size: 18px; text-transform: uppercase;
 }
-.site-nav__brand:hover { color: var(--accent); }
+.site-nav__brand:hover { color: var(--accent); text-shadow: 0 0 14px var(--accent-glow); }
 
 .hamburger {
   flex: 0 0 auto;
@@ -356,15 +396,20 @@ body { padding-top: 64px; }
 .nav-drawer__list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .nav-drawer__song:hover { background: var(--bg-elev); }
 .nav-drawer__song.is-current {
-  background: rgba(108, 140, 255, 0.14); color: var(--accent); font-weight: 600;
+  background: rgba(139, 255, 31, 0.14); color: var(--accent); font-weight: 600;
 }
 
 /* Landing */
 .landing { width: 100%; max-width: 620px; }
 .landing__header { margin-bottom: 24px; }
 .landing__title {
-  margin: 6px 0 0; font-size: clamp(26px, 7vw, 38px);
-  font-weight: 700; letter-spacing: -0.02em; line-height: 1.05;
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(34px, 9vw, 54px);
+  font-weight: 400; letter-spacing: 0.01em; line-height: 1;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-shadow: 0 0 24px var(--accent-glow), 0 3px 0 rgba(0, 0, 0, 0.5);
 }
 .landing__sub { margin: 10px 0 0; color: var(--text-dim); font-size: 14px; max-width: 46ch; }
 
@@ -383,7 +428,7 @@ body { padding-top: 64px; }
   box-shadow: 0 14px 34px -18px var(--accent-glow);
 }
 .song-card__main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.song-card__title { font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+.song-card__title { font-family: var(--font-display); font-weight: 400; font-size: 20px; letter-spacing: 0.02em; text-transform: uppercase; }
 .song-card__meta { color: var(--text-dim); font-size: 13px; }
 .song-card__chevron { color: var(--accent); font-size: 18px; flex: 0 0 auto; }
 
