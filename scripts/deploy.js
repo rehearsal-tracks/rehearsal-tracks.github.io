@@ -22,3 +22,4 @@ if (!gitOut("diff", "--cached", "--name-only")) {
 git("commit", "-m", `deploy: shell ${version}`);
 git("push");
 console.log(`✔ Deployed shell ${version}.`);
+
