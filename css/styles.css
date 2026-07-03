@@ -503,3 +503,4 @@ body { padding-top: 64px; }
 }
 .install-banner__close:hover { color: var(--text); }
 @media (prefers-reduced-motion: reduce) { .install-banner { animation: none; } }
+
