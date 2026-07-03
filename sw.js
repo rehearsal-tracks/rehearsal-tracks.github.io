@@ -12,10 +12,12 @@
 //     into Cache Storage — that's Phase B (per-song "make available offline"). Media therefore still
 //     benefits from the HTTP cache + the in-page prefetcher exactly as it does today.
 //
-// Bump SHELL_VERSION on any shell asset change to roll the precache (old caches are pruned on
-// activate). See the PWA design doc: ~/.claude/plans/2026-07-02-stem-player-pwa-design.md.
+// SHELL_VERSION is stamped with a content hash of the shell files at deploy time
+// (`npm run deploy` → scripts/stamp-sw.js), so every content change produces a byte-different sw.js
+// and the browser detects the update + re-precaches. Old caches are pruned on activate.
+// See the PWA design doc: ~/.claude/plans/2026-07-02-stem-player-pwa-design.md.
 
-const SHELL_VERSION = "v1";
+const SHELL_VERSION = "94cfdcb09f"; // stamped at deploy — do not rely on this literal
 const SHELL_CACHE = `rt-shell-${SHELL_VERSION}`;
 const RUNTIME_CACHE = `rt-runtime-${SHELL_VERSION}`;
 const CACHE_ALLOWLIST = new Set([SHELL_CACHE, RUNTIME_CACHE]);
@@ -61,8 +63,16 @@ self.addEventListener("install", (event) => {
       .map((r, i) => (r.status === "rejected" ? SHELL_ASSETS[i] : null))
       .filter(Boolean);
     if (failed.length) console.warn("[sw] precache misses:", failed);
-    await self.skipWaiting(); // take over as soon as possible (static single-purpose app)
+    // NOTE: no skipWaiting() here. A new worker installs (downloads the new shell) in the
+    // background but stays in "waiting" until either all tabs close (auto-activates on next cold
+    // launch) or the page sends SKIP_WAITING (the "Reload" pill) — so we never swap assets out from
+    // under an active session / mid-playback.
   })());
+});
+
+// The page's "Reload" pill posts this once the user opts in; only then do we activate immediately.
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 // ── Activate: prune old caches, claim clients ────────────────────────────────────────────────
