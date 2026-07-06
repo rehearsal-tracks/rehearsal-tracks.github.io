@@ -6,15 +6,20 @@ import { parseStem } from "./ordering.js";
 import { lengthReport } from "./validate.js";
 import { buildManifest } from "./manifest.js";
 import { probeDuration, segmentToHls, generateWaveform } from "./media.js";
+import { fileRev } from "./rev.js";
 
 export const AUDIO_EXT = new Set([".wav", ".mp3", ".flac", ".aiff", ".aif", ".m4a"]);
 
-// Segment one audio file into <outRoot>/<slug>/ (audio.m3u8 + segments + waveform.json).
-export async function segmentStem({ file, slug, outRoot, bitrate = "128k" }) {
-  const stemDir = join(outRoot, slug);
+// Segment one audio file into <outRoot>/<slug>/<rev>/ (audio.m3u8 + segments + waveform.json),
+// where <rev> is a content hash of the source file so replaced stems land at a fresh, cache-safe
+// url (see rev.js). Pass a precomputed `rev` to reuse a hash already taken; otherwise it's derived
+// from the file. Returns { stemDir, rev } — callers need the rev to build the manifest paths.
+export async function segmentStem({ file, slug, outRoot, bitrate = "128k", rev }) {
+  const stemRev = rev ?? (await fileRev(file));
+  const stemDir = join(outRoot, slug, stemRev);
   await segmentToHls(file, stemDir, bitrate);
   await generateWaveform(file, join(stemDir, "waveform.json"));
-  return stemDir;
+  return { stemDir, rev: stemRev };
 }
 
 // Discover, probe, sort, segment all stems in inputDir and write manifest.json.
@@ -55,7 +60,8 @@ export async function segmentSong({ inputDir, id, title, artist, bitrate = "128k
   await mkdir(outRoot, { recursive: true });
   for (const s of stems) {
     onLog(`→ segmenting ${s.name}`);
-    await segmentStem({ file: s.file, slug: s.slug, outRoot, bitrate });
+    const { rev } = await segmentStem({ file: s.file, slug: s.slug, outRoot, bitrate });
+    s.rev = rev; // buildManifest reads this to form the versioned src/waveform paths
   }
 
   const manifest = buildManifest({ id, title, artist, stems });

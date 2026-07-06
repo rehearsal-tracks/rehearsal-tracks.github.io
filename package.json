@@ -8,6 +8,7 @@
     "segment": "node scripts/segment-song.js",
     "admin": "node scripts/admin-server.js",
     "set-cache-headers": "node scripts/set-cache-headers.js",
+    "prune-media": "node scripts/prune-media.js",
     "stamp-sw": "node scripts/stamp-sw.js",
     "deploy": "node scripts/deploy.js",
     "serve": "python3 -m http.server 8000"

@@ -166,10 +166,12 @@ async function route(req, res, pathname) {
     try {
       const { segmentStem } = await import("./lib/segment.js");
       const { probeDuration } = await import("./lib/media.js");
-      await segmentStem({ file: inputFile, slug, outRoot });
+      // Segments into outRoot/<slug>/<rev>/; uploading outRoot/<slug> recursively lands the rev
+      // folder at songs/<id>/<slug>/<rev>/…. The manifest points at that versioned path.
+      const { rev } = await segmentStem({ file: inputFile, slug, outRoot });
       const seconds = await probeDuration(inputFile);
       await uploadDir(join(outRoot, slug), BUCKET, `songs/${id}/${slug}`);
-      const next = addStem(manifest, { name, slug, seconds, src: `${slug}/audio.m3u8`, waveform: `${slug}/waveform.json` });
+      const next = addStem(manifest, { name, slug, seconds, rev, src: `${slug}/${rev}/audio.m3u8`, waveform: `${slug}/${rev}/waveform.json` });
       await updateRemoteManifest(BUCKET, id, next);
       await refresh();
       return send(res, 201, { ok: true, slug });

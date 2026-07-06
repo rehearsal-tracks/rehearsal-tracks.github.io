@@ -104,6 +104,18 @@ export async function uploadJson(obj, bucket, remotePath) {
   }
 }
 
+// Delete a single remote object by full path (used by the media-prune step to drop orphaned
+// stem revisions). Tolerates an already-absent file so prune is idempotent.
+export async function deleteRemoteFile(bucket, path) {
+  try {
+    await pexec("rclone", ["deletefile", `r2:${bucket}/${path}`, "--s3-no-check-bucket"]);
+  } catch (e) {
+    const msg = `${e.stderr || ""}${e.message || ""}`.toLowerCase();
+    if (msg.includes("not found") || msg.includes("doesn't exist") || msg.includes("object not found")) return;
+    throw e;
+  }
+}
+
 // Purge a whole song's R2 tree. Tolerates an already-absent path (idempotent delete).
 export async function deleteRemoteSong(bucket, id) {
   await purgeTolerant(`r2:${bucket}/songs/${id}`);

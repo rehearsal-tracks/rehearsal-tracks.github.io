@@ -40,6 +40,17 @@ test("addStem appends with seconds and bumps durationSeconds", () => {
   assert.equal(m.durationSeconds, 250);
 });
 
+test("addStem stores the content rev and versioned paths when provided", () => {
+  const m = addStem(base(), {
+    name: "Synth", slug: "synth", seconds: 120, rev: "deadbeef01",
+    src: "synth/deadbeef01/audio.m3u8", waveform: "synth/deadbeef01/waveform.json",
+  });
+  assert.deepEqual(m.stems[2], {
+    name: "Synth", slug: "synth", seconds: 120, rev: "deadbeef01",
+    src: "synth/deadbeef01/audio.m3u8", waveform: "synth/deadbeef01/waveform.json",
+  });
+});
+
 test("addStem keeps durationSeconds when new stem is shorter", () => {
   assert.equal(addStem(base(), { name: "Tamb", slug: "tamb", seconds: 90, src: "tamb/audio.m3u8", waveform: "tamb/waveform.json" }).durationSeconds, 200);
 });

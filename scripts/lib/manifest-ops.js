@@ -26,7 +26,7 @@ export function editMeta(manifest, { title, artist } = {}) {
   return m;
 }
 
-export function addStem(manifest, { name, slug, seconds, src, waveform }) {
+export function addStem(manifest, { name, slug, seconds, src, waveform, rev }) {
   if (!slug) throw new Error(`stem slug is empty/invalid`);
   if (typeof seconds !== "number" || !Number.isFinite(seconds)) {
     throw new Error(`stem seconds required (got ${JSON.stringify(seconds)})`);
@@ -35,7 +35,9 @@ export function addStem(manifest, { name, slug, seconds, src, waveform }) {
     throw new Error(`stem slug "${slug}" already exists`);
   }
   const m = clone(manifest);
-  m.stems.push({ name, slug, seconds, src, waveform });
+  // rev (content version) is included when present so the entry mirrors buildManifest output; a
+  // legacy caller that omits it still produces a valid (unversioned) entry.
+  m.stems.push({ name, slug, seconds, ...(rev !== undefined ? { rev } : {}), src, waveform });
   m.durationSeconds = Math.max(manifest.durationSeconds, seconds);
   return m;
 }
