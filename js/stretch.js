@@ -99,17 +99,34 @@ async function main() {
 
   // ── Headless stretch core owns the audio ────────────────────────────────────────────────────
   const engine = createStretchEngine({ ac, base, stems: manifest.stems });
-  try {
-    await engine.load();
-  } catch (e) {
-    return showError(`Couldn't initialise stretch core — ${e.message}`);
-  }
 
   const pushGains = () => {
     const soloActive = stemEls.some((el) => el.solo === "on");
     stemEls.forEach((el, i) => engine.setGain(i, effectiveGain(el, soloActive)));
   };
-  pushGains();
+
+  // Load the core (parse m3u8s + create the signalsmith AudioWorklet nodes) LAZILY, on the first
+  // play or seek — NOT at page load. On iOS/WebKit `ac.audioWorklet` is undefined until the
+  // AudioContext has been resumed inside a user gesture, so loading eagerly throws there
+  // ("undefined is not an object (evaluating 'audioContext.audioWorklet.addModule')"). Resuming
+  // first, from within the gesture, makes the worklet available. `ac.resume()` therefore has to be
+  // kicked off synchronously inside the handler (before any await), which it is — ensureCore() runs
+  // up to its first await synchronously. The de-duped promise means a concurrent play+seek loads once.
+  let coreLoading = null;
+  const ensureCore = () => {
+    if (!coreLoading) {
+      coreLoading = (async () => {
+        await ac.resume();
+        await engine.load();
+        pushGains();
+      })().catch((e) => {
+        coreLoading = null; // let the next gesture retry
+        showError(`Couldn't initialise stretch core — ${e.message}`);
+        throw e;
+      });
+    }
+    return coreLoading;
+  };
 
   // Drive the component's visual playhead from the core's source-time, keep the mix gains in step,
   // and reflect play/pause state onto the native controls button (controls.isPlaying flips its icon).
@@ -141,8 +158,14 @@ async function main() {
   // the host fires FIRST (on the way down to the controls target); stopPropagation there prevents the
   // component's silent controller from playing. We route to our core instead, and the core's `state`
   // event (above) sets controls.isPlaying so the button still shows the correct play/pause icon.
-  player.addEventListener("controls:play", (e) => { e.stopPropagation(); engine.play(); }, true);
+  player.addEventListener("controls:play", (e) => { e.stopPropagation(); ensureCore().then(() => engine.play()).catch(() => {}); }, true);
   player.addEventListener("controls:pause", (e) => { e.stopPropagation(); engine.pause(); }, true);
+
+  // Warm the core on the FIRST real interaction anywhere on the page (a genuine gesture — synthetic
+  // events don't count on iOS), so the worklet is usually ready by the time the user hits play rather
+  // than loading on the play tap itself. load() only parses m3u8s + builds nodes here; the heavy
+  // segment decoding still waits for actual playback, so warming early is cheap.
+  window.addEventListener("pointerdown", () => { ensureCore().catch(() => {}); }, { once: true, capture: true });
 
   // Scrub guard: a pointer held anywhere on the transport (the native seek bar lives there) means the
   // user may be dragging the playhead — freeze the periodic playhead writes until they let go.
@@ -162,6 +185,7 @@ async function main() {
     const target = e.detail.t;
     clearTimeout(seekTimer);
     seekTimer = setTimeout(async () => {
+      try { await ensureCore(); } catch { seekSettling = false; return; }
       await engine.seek(target);
       seekSettling = false;
       applyPlayhead(engine.currentTime, engine.duration ? engine.currentTime / engine.duration : 0);
