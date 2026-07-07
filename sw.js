@@ -17,7 +17,7 @@
 // and the browser detects the update + re-precaches. Old caches are pruned on activate.
 // See the PWA design doc: ~/.claude/plans/2026-07-02-stem-player-pwa-design.md.
 
-const SHELL_VERSION = "eeb6683153"; // stamped at deploy — do not rely on this literal
+const SHELL_VERSION = "82f815fe3e"; // stamped at deploy — do not rely on this literal
 const SHELL_CACHE = `rt-shell-${SHELL_VERSION}`;
 const RUNTIME_CACHE = `rt-runtime-${SHELL_VERSION}`;
 const CACHE_ALLOWLIST = new Set([SHELL_CACHE, RUNTIME_CACHE]);
