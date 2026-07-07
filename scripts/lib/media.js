@@ -26,7 +26,7 @@ export async function segmentToHls(file, outDir, bitrate = "128k") {
   await run("ffmpeg", [
     "-y", "-i", input, "-vn", "-ac", "2",
     "-c:a", "libmp3lame", "-b:a", bitrate,
-    "-f", "segment", "-segment_time", "6",
+    "-f", "segment", "-segment_time", "12",
     "-segment_format", "mp3", "-reset_timestamps", "1",
     "-segment_list", "audio.m3u8", "-segment_list_type", "m3u8",
     "seg_%03d.mp3",
