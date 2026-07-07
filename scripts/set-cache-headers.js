@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One-off backfill: stamp Cache-Control (+ Timing-Allow-Origin) onto R2 objects that were
+// One-off backfill: stamp Cache-Control onto R2 objects that were
 // uploaded BEFORE the upload path started setting these headers. New uploads get the headers
 // automatically (see scripts/lib/upload.js); this fixes the existing catalog.
 //
@@ -21,7 +21,7 @@
 // fetch is a cache hit.
 import {
   listSongIds, listRemoteFiles, setRemoteHeaders,
-  CACHE_IMMUTABLE, CACHE_MUTABLE, TIMING_ALLOW,
+  CACHE_IMMUTABLE, CACHE_MUTABLE,
 } from "./lib/upload.js";
 
 const argv = process.argv.slice(2);
@@ -39,7 +39,7 @@ const dryRun = !!getArg("dry-run") || (!onlySong && !runAll);
 
 // manifest.json is the only mutable file living under songs/**; everything else is an audio asset.
 const headersFor = (relPath) =>
-  relPath.endsWith("manifest.json") ? [CACHE_MUTABLE] : [CACHE_IMMUTABLE, TIMING_ALLOW];
+  relPath.endsWith("manifest.json") ? [CACHE_MUTABLE] : [CACHE_IMMUTABLE];
 
 async function main() {
   if (dryRun && !getArg("dry-run")) {

@@ -11,12 +11,17 @@ const pexec = promisify(execFile);
 // - Audio assets (segments, waveform, playlist) NEVER change once written for a given encode, so
 //   they're immutable + long-lived. This lets the player's prefetcher warm the browser HTTP cache
 //   and have the audio engine reuse it (verified: without an explicit header, R2 falls back to
-//   heuristic caching and segments get re-fetched). Timing-Allow-Origin lets the page read cross-
-//   origin transfer timing (for future bandwidth-adaptive prefetch depth).
+//   heuristic caching and segments get re-fetched).
 // - JSON indices (manifest.json, catalog.json) are edited by the admin tool, so they stay no-cache.
+//
+// NOTE: Timing-Allow-Origin can't be set here. rclone's S3 backend only stores a fixed set of
+// object headers (Cache-Control, Content-Type, Content-{Disposition,Encoding,Language}, Expires,
+// x-amz-meta-*); any other --header-upload key logs `Don't know how to set key "X" on upload` and
+// is dropped. R2 also can't return an arbitrary custom header from object metadata, so if we ever
+// want Timing-Allow-Origin (for bandwidth-adaptive prefetch depth) it must be added at the
+// Cloudflare edge (a "Modify Response Header" Transform Rule / Worker), not on the PUT.
 export const CACHE_IMMUTABLE = "Cache-Control: public, max-age=31536000, immutable";
 export const CACHE_MUTABLE = "Cache-Control: no-cache";
-export const TIMING_ALLOW = "Timing-Allow-Origin: *";
 
 // Uploads localDir -> r2:<bucket>/<remotePrefix> using a preconfigured rclone remote "r2".
 // Uses spawn (not promisify(execFile)) so rclone's --progress streams live to the terminal.
@@ -32,7 +37,6 @@ export function uploadDir(localDir, bucket, remotePrefix) {
       "--s3-no-check-bucket",
       "--exclude", "manifest.json",
       "--header-upload", CACHE_IMMUTABLE,
-      "--header-upload", TIMING_ALLOW,
       "--progress",
     ], { stdio: "inherit" });
     proc.on("error", reject);
