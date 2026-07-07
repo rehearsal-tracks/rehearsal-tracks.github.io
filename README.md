@@ -7,7 +7,8 @@ else's.
 
 - 🎚️ Per-stem volume + mute/solo, master volume, seek, synced waveforms
 - 🔒 Per-listener independence — mix state lives only in the visitor's browser
-- 🌊 Streams from Cloudflare R2 (HLS MP3 segments) — handles 10+ stems × ~10 min without loading whole files into memory
+- 🌊 Streams from Cloudflare R2 (HLS MP3 segments) over HTTP/2 — handles 10+ stems × ~10 min without loading whole files into memory
+- 📲 Installable PWA — add to home screen, then **download songs for fully offline playback**
 - 📱 Works in Safari/Chrome/Firefox on phone, tablet, desktop — no app, no account
 - 🪶 Static front-end, no build step, no server
 
@@ -22,25 +23,37 @@ The front-end is two static pages, plain ES modules, no bundler:
 
 Audio is **not** loaded whole. A local CLI pre-processes each song into HLS MP3
 segments + waveform JSON and uploads everything to a public-read **Cloudflare R2**
-bucket. The player streams segments on demand through one shared Web Audio clock,
-which keeps the stems sample-accurate.
+bucket, served through a **custom domain over HTTP/2** (the `pub-*.r2.dev` dev URL
+is HTTP/1.1-only and caps the browser at ~6 connections — see
+`docs/R2-SETUP.md`). The player streams segments on demand through one shared Web
+Audio clock, which keeps the stems sample-accurate. A service worker (`sw.js`)
+makes the app installable and, on request, downloads a whole song into Cache
+Storage for offline playback.
 
 ```
 your stems ──(scripts/segment-song.js)──▶ HLS segments + waveform.json + manifest.json
                                                           │
                                                    upload to R2
                                                           │
-   index.html / stream.html  ◀── fetch catalog.json / manifest.json ──  R2 (public r2.dev URL)
+   index.html / stream.html  ◀── fetch catalog.json / manifest.json ──  R2 (custom domain, HTTP/2)
 ```
 
 Storage layout on R2:
 
 ```
 catalog.json                     # index of all songs (built by the CLI)
-songs/<id>/manifest.json         # one song: title, artist, duration, stems
-songs/<id>/<stem-slug>/audio.m3u8 + seg_***.mp3
-songs/<id>/<stem-slug>/waveform.json
+songs/<id>/manifest.json         # one song: title, artist, duration, stems — mutable pointer (no-cache)
+songs/<id>/<stem-slug>/<rev>/audio.m3u8 + seg_***.mp3
+songs/<id>/<stem-slug>/<rev>/waveform.json
 ```
+
+`<rev>` is a short content hash of the source stem. Media is served `immutable`,
+so versioning the path by content is what lets a **replaced** stem reach listeners
+who already cached the old bytes: new content → new `<rev>` → new URL → fresh
+fetch. The manifest is the single mutable pointer (`no-cache`, revalidated). Old
+revisions left behind by a replace are swept with `npm run prune-media` (dry-run
+by default; `-- --apply` to delete). New/removed stems already propagate via the
+`no-cache` manifest + catalog.
 
 ---
 
@@ -144,10 +157,22 @@ always reflects whatever is in the bucket — no sync step. Run it alongside
 This repo is an **org site**: it lives in the `rehearsal-tracks` org and is named
 `rehearsal-tracks.github.io`, so Pages serves it at the root of that subdomain.
 
-1. Push to GitHub (`main`).
-2. **Settings → Pages → Build and deployment → Source: Deploy from a branch**,
+Deploy with **`npm run deploy`**, not a bare `git push`:
+
+```bash
+npm run deploy           # stamp sw.js with a content hash → commit → push
+```
+
+The stamp writes a hash of the app-shell files into the service worker's
+`SHELL_VERSION`, so every content change makes `sw.js` byte-different — that's how
+the browser notices a new version, re-precaches the shell, and rolls its caches.
+A bare push updates the files but the cached service worker / esm.sh copy can go
+stale. Clients auto-activate the new worker on the next cold launch (or via the
+in-app "↻ Reload" pill). One-time Pages setup:
+
+1. **Settings → Pages → Build and deployment → Source: Deploy from a branch**,
    branch `main`, folder `/ (root)`.
-3. Link: **`https://rehearsal-tracks.github.io`**
+2. Link: **`https://rehearsal-tracks.github.io`**
 
 Because the repo is `<org>.github.io`, the site is served at the domain root — all
 in-page paths are relative, so nothing in the code hardcodes the URL. The empty
@@ -182,13 +207,18 @@ the same link hear whatever *they* set — the link is shared, the mix is not.
 
 | Path | What |
 |---|---|
-| `index.html`, `js/landing.js` | Landing page (song list from `catalog.json`) |
+| `index.html`, `js/landing.js` | Landing page (song list from `catalog.json` + offline-downloads section) |
 | `stream.html`, `js/stream.js` | Player page (one song via `stemplayer-js`) |
-| `js/nav.js`, `js/data.js`, `js/lib/` | Shared nav drawer, R2 fetches, pure view helpers |
+| `js/nav.js`, `js/data.js`, `js/config.js`, `js/lib/` | Shared nav drawer, R2 fetches, R2 base URL, pure view helpers |
+| `js/prefetch.js` | Anticipatory segment prefetch (warms the HTTP cache ahead of the playhead) |
+| `sw.js`, `js/sw-register.js`, `manifest.webmanifest`, `icons/` | PWA: installable app shell + auto-update flow |
+| `js/offline.js`, `js/offline-ui.js` | Offline downloads — per-song Cache Storage + storage UI |
 | `css/styles.css` | Dark design system (shared by both pages) |
 | `scripts/segment-song.js` | CLI: encode + upload one song; refresh catalog |
 | `scripts/refresh-catalog.js` | Rebuild `catalog.json` from R2 |
+| `scripts/prune-media.js` | Delete orphaned old-rev media from R2 (dry-run; `-- --apply`) |
+| `scripts/deploy.js`, `scripts/stamp-sw.js` | Deploy: stamp `sw.js` version → commit → push |
 | `scripts/admin-server.js`, `scripts/admin/public/` | Local admin web UI (`npm run admin`) |
-| `scripts/lib/` | Pipeline modules (media, manifest, catalog, ordering, segment, upload, manifest-ops, safe-path) |
+| `scripts/lib/` | Pipeline modules (media, manifest, catalog, ordering, segment, upload, manifest-ops, rev, prune, safe-path) |
 | `docs/R2-SETUP.md` | One-time Cloudflare R2 setup runbook |
 | `legacy/` | The original v0 whole-file player, retired |
