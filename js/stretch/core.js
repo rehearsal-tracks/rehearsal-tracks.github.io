@@ -55,15 +55,24 @@ export function createStretchEngine({ ac, base, stems, fetchImpl = fetch }) {
   let duration = 0;      // total song length (secs), from the m3u8 durations
   let rate = 1;          // current playback rate (0.7..1)
   let playing = false;
-  let inputBase = 0;     // source seconds at the current feed origin (advances only on seek)
+  let inputBase = 0;     // source seconds at the current feed origin / buffer position 0 (moves on seek)
+  let headRel = 0;       // read position RELATIVE to inputBase (secs into the fed buffers)
   let feedTimer = null;
   let ended = false;
 
+  // Read position relative to the feed origin. WHILE PLAYING the worklet's own inputTime is the live
+  // truth; otherwise `headRel` is (it's frozen on pause and set explicitly on seek). We must NOT trust
+  // node.inputTime while stopped: dropBuffers()/stop() don't reset it and no process() runs to refresh
+  // it, so after a paused seek it still holds the pre-pause position — which would make play() resume
+  // tens of seconds past where the user dropped the playhead.
+  function liveRel() {
+    const n = tracks[0]?.node;
+    return playing && n ? (Number(n.inputTime) || 0) : headRel;
+  }
+
   // Master source-time playhead: feed origin + how far the (synchronised) nodes have read.
   function inputTime() {
-    const n = tracks[0]?.node;
-    const t = n ? Number(n.inputTime) || 0 : 0;
-    return inputBase + t;
+    return inputBase + liveRel();
   }
 
   async function load() {
@@ -176,9 +185,10 @@ export function createStretchEngine({ ac, base, stems, fetchImpl = fetch }) {
     if (playing) return;
     if (ac.state === "suspended") await ac.resume();
     ended = false;
-    const relHead = inputTime() - inputBase;
-    await ensurePrebuffer(relHead);
-    scheduleAll(relHead);
+    // Start from the explicit read position, NOT node.inputTime (see liveRel): after a paused seek
+    // the worklet's clock is stale, so trusting it here is exactly what jumped playback ahead.
+    await ensurePrebuffer(headRel);
+    scheduleAll(headRel);
     playing = true;
     startFeedLoop();
     ev.emit("state", { playing: true });
@@ -186,6 +196,7 @@ export function createStretchEngine({ ac, base, stems, fetchImpl = fetch }) {
 
   function stop(isEnd = false) {
     if (!playing && !isEnd) return;
+    if (playing) headRel = liveRel(); // freeze the live read position so resume continues from here
     playing = false;
     for (const t of tracks) t.node?.stop?.();
     stopFeedLoop();
@@ -199,15 +210,16 @@ export function createStretchEngine({ ac, base, stems, fetchImpl = fetch }) {
     const clamped = Math.max(0, Math.min(duration, sec));
     const wasPlaying = playing;
     if (playing) { playing = false; for (const t of tracks) t.node?.stop?.(); stopFeedLoop(); }
-    // Snap to the segment boundary containing `clamped` and refeed from there. dropBuffers() with no
-    // arg clears each node and resets its input timeline to 0, so inputBase carries the absolute pos.
-    let originIdx = 0;
-    for (const t0 of [tracks[0]]) {
-      const segs = t0.segs;
-      originIdx = Math.max(0, segs.findIndex((s) => s.end > clamped));
-      if (originIdx === -1) originIdx = 0;
-      inputBase = segs[originIdx] ? segs[originIdx].start : 0;
-    }
+    // Feed whole segments, so the feed origin (buffer position 0) snaps to the START of the segment
+    // containing `clamped`. dropBuffers() with no arg clears each node and resets its input timeline
+    // to 0, so inputBase carries the absolute position of that boundary.
+    const segs = tracks[0].segs;
+    let originIdx = segs.findIndex((s) => s.end > clamped);
+    if (originIdx < 0) originIdx = Math.max(0, segs.length - 1); // past the last segment → last one
+    inputBase = segs[originIdx] ? segs[originIdx].start : 0;
+    // Resume from the EXACT sought position: headRel is the offset of `clamped` into that first
+    // segment. (Reading a fraction into the fed buffers is fine — the data from the boundary is there.)
+    headRel = Math.max(0, clamped - inputBase);
     for (const t of tracks) {
       await t.node?.dropBuffers?.();
       t.nextIdx = t.segs[originIdx] ? originIdx : 0;
@@ -215,7 +227,7 @@ export function createStretchEngine({ ac, base, stems, fetchImpl = fetch }) {
       t.busy = false;
       t.droppedTo = 0;
     }
-    ev.emit("time", { time: inputBase, pct: duration ? inputBase / duration : 0 });
+    ev.emit("time", { time: inputBase + headRel, pct: duration ? (inputBase + headRel) / duration : 0 });
     if (wasPlaying) await play();
   }
 

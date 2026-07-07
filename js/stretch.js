@@ -111,14 +111,19 @@ async function main() {
   };
   pushGains();
 
-  // Drive the component's visual playhead from the core's source-time each tick (mirrors the
-  // component's own uiTick), keep the mix gains in step, and reflect play/pause state onto the
-  // native controls button (controls.isPlaying flips its icon — see the transport interception).
-  const setPlayhead = (t, pct) => {
+  // Drive the component's visual playhead from the core's source-time, keep the mix gains in step,
+  // and reflect play/pause state onto the native controls button (controls.isPlaying flips its icon).
+  // `applyPlayhead` writes the position unconditionally; `setPlayhead` (used for the core's periodic
+  // ticks) is SUPPRESSED while the user is scrubbing the seek bar or a seek is still settling —
+  // otherwise a tick would overwrite the thumb the user is dragging and it visibly jerks back.
+  let scrubbing = false;    // pointer held on the transport (a seek drag may be in progress)
+  let seekSettling = false; // a seek was requested and not yet applied to the core
+  const applyPlayhead = (t, pct) => {
     stemEls.forEach((el) => { el.currentPct = pct; });
     controls.currentTime = t;
     controls.currentPct = pct;
   };
+  const setPlayhead = (t, pct) => { if (scrubbing || seekSettling) return; applyPlayhead(t, pct); };
   engine.on("time", ({ time, pct }) => setPlayhead(time, pct));
   engine.on("state", ({ playing }) => { controls.isPlaying = playing; });
   engine.on("end", () => { controls.isPlaying = false; });
@@ -138,8 +143,30 @@ async function main() {
   // event (above) sets controls.isPlaying so the button still shows the correct play/pause icon.
   player.addEventListener("controls:play", (e) => { e.stopPropagation(); engine.play(); }, true);
   player.addEventListener("controls:pause", (e) => { e.stopPropagation(); engine.pause(); }, true);
-  // Seek: the component sets its own (harmless) controller.pct and re-dispatches `seek` with {t,pct}.
-  player.addEventListener("seek", (e) => { if (e.detail && typeof e.detail.t === "number") engine.seek(e.detail.t); });
+
+  // Scrub guard: a pointer held anywhere on the transport (the native seek bar lives there) means the
+  // user may be dragging the playhead — freeze the periodic playhead writes until they let go.
+  controls.addEventListener("pointerdown", () => { scrubbing = true; }, true);
+  const endScrub = () => { scrubbing = false; };
+  window.addEventListener("pointerup", endScrub);
+  window.addEventListener("pointercancel", endScrub);
+
+  // Seek: the component re-dispatches `seek` with {t, pct} (continuously through a drag, and on
+  // release). Debounce so the core's expensive dropBuffers()/refeed runs once the scrub settles
+  // rather than on every intermediate value, then force the final position onto the playhead — the
+  // periodic ticks are suppressed while seeking, and when paused there are none at all.
+  let seekTimer;
+  player.addEventListener("seek", (e) => {
+    if (!e.detail || typeof e.detail.t !== "number") return;
+    seekSettling = true;
+    const target = e.detail.t;
+    clearTimeout(seekTimer);
+    seekTimer = setTimeout(async () => {
+      await engine.seek(target);
+      seekSettling = false;
+      applyPlayhead(engine.currentTime, engine.duration ? engine.currentTime / engine.duration : 0);
+    }, 120);
+  });
 
   // ── Speed (rate) control — the only UI beyond the standard player ────────────────────────────
   const bar = document.createElement("div");
