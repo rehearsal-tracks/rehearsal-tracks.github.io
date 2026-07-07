@@ -504,3 +504,59 @@ body { padding-top: 64px; }
 .install-banner__close:hover { color: var(--text); }
 @media (prefers-reduced-motion: reduce) { .install-banner { animation: none; } }
 
+/* ── Offline download control (js/offline-ui.js, player page) ─────────────────────────────────
+   Sits below the player: a download button that becomes a progress bar while downloading, then a
+   "✓ Available offline · size / Remove" row once cached. */
+.offline {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+  margin: 18px 0 4px;
+}
+.offline__btn {
+  appearance: none; cursor: pointer;
+  background: var(--bg-elev-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 9px 18px; font-size: 14px; font-weight: 600; letter-spacing: 0.01em;
+  transition: border-color 0.18s var(--ease), color 0.18s var(--ease), background 0.18s var(--ease);
+}
+.offline__btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.offline__btn:disabled { opacity: 0.6; cursor: default; }
+.offline__btn--ghost { background: transparent; color: var(--text-dim); padding: 9px 14px; }
+.offline__btn--ghost:hover:not(:disabled) { border-color: var(--accent-2); color: var(--accent-2); }
+.offline__done { color: var(--accent); font-size: 14px; font-weight: 600; }
+.offline__status { color: var(--text-dim); font-size: 13px; }
+.offline__bar {
+  flex: 1 1 160px; min-width: 120px; height: 8px;
+  background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden;
+}
+.offline__fill {
+  height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.2s var(--ease);
+}
+
+/* ── Downloads / storage section (js/offline-ui.js, landing page) ─────────────────────────────── */
+.downloads { margin-top: 28px; }
+.downloads__heading {
+  font-family: var(--font-display); font-weight: 400; font-size: 18px;
+  letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-dim);
+  margin: 0 0 12px;
+}
+.downloads__list { display: flex; flex-direction: column; gap: 8px; }
+.downloads__row {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px 16px;
+}
+.downloads__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.downloads__size { color: var(--text-dim); font-size: 13px; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.downloads__remove {
+  appearance: none; cursor: pointer; flex: 0 0 auto;
+  background: transparent; color: var(--text-dim);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 6px 14px; font-size: 13px;
+  transition: border-color 0.18s var(--ease), color 0.18s var(--ease);
+}
+.downloads__remove:hover:not(:disabled) { border-color: var(--accent-2); color: var(--accent-2); }
+.downloads__remove:disabled { opacity: 0.5; cursor: default; }
+.downloads__usage { color: var(--text-dim); font-size: 12px; margin: 12px 2px 0; }
+

@@ -2,8 +2,10 @@
 import { fetchCatalog } from "./data.js";
 import { songCardModel } from "./lib/catalog-view.js";
 import { initNav } from "./nav.js";
+import { mountDownloadsSection } from "./offline-ui.js";
 
 const listEl = document.getElementById("song-list");
+const downloadsEl = document.getElementById("downloads");
 
 function setState(html) { listEl.innerHTML = html; }
 
@@ -39,6 +41,10 @@ async function main() {
   try {
     const catalog = await fetchCatalog();
     renderSongs(catalog.songs);
+    // Downloaded-songs list + storage usage (PWA Phase B). Additive and feature-gated; a failure
+    // must never take down the catalog, so it's wrapped separately.
+    try { await mountDownloadsSection(downloadsEl, catalog.songs); }
+    catch { /* offline UI is additive */ }
   } catch (e) {
     setState(`<p class="error-card">Couldn't load the song list — ${e.message}</p>`);
   }

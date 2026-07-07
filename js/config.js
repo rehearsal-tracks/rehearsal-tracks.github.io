@@ -1,2 +1,5 @@
 // js/config.js — single source of truth for the R2 base URL.
-export const R2_BASE = "https://pub-d03f49e76d2f43f59b17998178007fa4.r2.dev";
+// Served via a Cloudflare custom domain (HTTP/2 + HTTP/3), NOT the pub-*.r2.dev dev URL, which is
+// HTTP/1.1-only and rate-limited — the custom domain lifts the ~6-connection-per-host cap that made
+// full offline downloads crawl. See ~/.claude/plans/2026-07-07-r2-custom-domain-http2-runbook.md.
+export const R2_BASE = "https://media.andrewbray.us";

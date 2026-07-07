@@ -22,9 +22,15 @@ const SHELL_CACHE = `rt-shell-${SHELL_VERSION}`;
 const RUNTIME_CACHE = `rt-runtime-${SHELL_VERSION}`;
 const CACHE_ALLOWLIST = new Set([SHELL_CACHE, RUNTIME_CACHE]);
 
+// Per-song offline downloads (Phase B, written by js/offline.js) live in `rt-song-<id>` caches.
+// These are deliberately NOT version-scoped: a deploy rolls the shell/runtime caches but must NOT
+// wipe a user's downloaded songs, so activate spares anything with this prefix.
+const SONG_CACHE_PREFIX = "rt-song-";
+
 // R2 origin that serves song media + the catalog/manifest JSON. Kept in sync with js/config.js
 // (R2_BASE). A classic worker can't import the ES module, so this one string is duplicated.
-const R2_ORIGIN = "https://pub-d03f49e76d2f43f59b17998178007fa4.r2.dev";
+// Cloudflare custom domain (HTTP/2), NOT the HTTP/1.1 pub-*.r2.dev dev URL — see js/config.js.
+const R2_ORIGIN = "https://media.andrewbray.us";
 
 // Same-origin shell assets. Relative to the SW scope (site root). "./" caches the root navigation.
 const SHELL_ASSETS = [
@@ -39,6 +45,8 @@ const SHELL_ASSETS = [
   "js/landing.js",
   "js/lava-lamp.js",
   "js/nav.js",
+  "js/offline.js",
+  "js/offline-ui.js",
   "js/prefetch.js",
   "js/stream.js",
   "js/sw-register.js",
@@ -79,7 +87,11 @@ self.addEventListener("message", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const names = await caches.keys();
-    await Promise.all(names.filter((n) => !CACHE_ALLOWLIST.has(n)).map((n) => caches.delete(n)));
+    await Promise.all(
+      names
+        .filter((n) => !CACHE_ALLOWLIST.has(n) && !n.startsWith(SONG_CACHE_PREFIX))
+        .map((n) => caches.delete(n))
+    );
     await self.clients.claim();
   })());
 });
@@ -116,9 +128,11 @@ self.addEventListener("fetch", (event) => {
 
   // 4. R2 assets.
   if (url.origin === R2_ORIGIN) {
-    // Mutable indices → network-first, fall back to the last-seen copy offline.
+    // Mutable indices → network-first, fall back to the last-seen copy offline. searchAllCaches so
+    // a downloaded song's manifest.json (stored in its rt-song-<id> cache) still resolves offline
+    // even after a deploy has rolled the runtime cache.
     if (url.pathname.endsWith("catalog.json") || url.pathname.endsWith("manifest.json")) {
-      event.respondWith(networkFirst(request, RUNTIME_CACHE));
+      event.respondWith(networkFirst(request, RUNTIME_CACHE, null, true));
       return;
     }
     // Media (seg_*.mp3 / waveform.json / audio.m3u8): serve from Cache Storage if Phase B has
@@ -132,14 +146,17 @@ self.addEventListener("fetch", (event) => {
 
 // ── Strategy helpers ─────────────────────────────────────────────────────────────────────────
 
-async function networkFirst(request, cacheName, fallbackKey) {
+async function networkFirst(request, cacheName, fallbackKey, searchAllCaches = false) {
   const cache = await caches.open(cacheName);
   try {
     const res = await fetch(request);
     if (res && res.ok) cache.put(request, res.clone());
     return res;
   } catch (err) {
-    const cached = (await cache.match(request)) || (fallbackKey && (await cache.match(fallbackKey)));
+    const cached =
+      (await cache.match(request)) ||
+      (searchAllCaches && (await caches.match(request))) ||
+      (fallbackKey && (await cache.match(fallbackKey)));
     if (cached) return cached;
     throw err;
   }

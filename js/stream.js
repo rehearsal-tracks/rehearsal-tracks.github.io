@@ -2,6 +2,7 @@
 import { R2_BASE } from "./config.js";
 import { initNav } from "./nav.js";
 import { initPrefetch } from "./prefetch.js";
+import { mountOfflineControl } from "./offline-ui.js";
 
 const params = new URLSearchParams(location.search);
 const songId = params.get("song");
@@ -123,9 +124,30 @@ async function main() {
   // Anticipatory prefetch: warm the browser cache with segments further ahead than the engine's
   // own ~10s window, so a slow segment on any one stem doesn't stall the whole mix. Component-
   // agnostic (warms the cache the engine reads from) and wrapped so it can never break playback.
+  // Held behind a small controller so the offline downloader can PAUSE it: the two both pull the
+  // whole song, so running them together doubles every request and saturates the ~6-connection
+  // budget (each segment would be fetched once for the HTTP cache AND once for Cache Storage). While
+  // downloading — or once a song is fully downloaded (the SW then serves it from Cache Storage) —
+  // prefetch is redundant, so we stop it and let the downloader/SW be the single fetch path.
+  let prefetch = null;
+  const prefetchCtl = {
+    resume() {
+      if (prefetch) return;
+      try { prefetch = initPrefetch({ player, base, stems: manifest.stems }); }
+      catch { /* prefetch is a pure optimization — never let it interfere with playback */ }
+    },
+    pause() { prefetch?.stop(); prefetch = null; },
+  };
+  prefetchCtl.resume();
+
+  // "Download for offline" control (PWA Phase B). Sits below the player; feature-gated on Cache
+  // Storage and fully self-contained, so it never affects playback. Also quietly reconciles an
+  // already-downloaded copy against the fresh manifest we just fetched.
   try {
-    initPrefetch({ player, base, stems: manifest.stems });
-  } catch { /* prefetch is a pure optimization — never let it interfere with playback */ }
+    const offlineHost = document.createElement("div");
+    playerEl.after(offlineHost);
+    mountOfflineControl(offlineHost, { songId, base, manifest, prefetchCtl });
+  } catch { /* offline UI is additive — never let it break the page */ }
 
   // Persist the mix on any change. Delegated on the #player container so it captures BOTH our mobile
   // fader rows (native <input>/<button> in light DOM) and the component's own wide-layout controls
