@@ -56,12 +56,12 @@ async function main() {
 
   await customElements.whenDefined("stemplayer-js");
 
-  // Two contexts on purpose: `ac` plays our stretched audio; `viewAc` is the component's own context,
-  // kept silent (disconnected destination) so even an accidental component play makes no sound — and
-  // so the component's own suspend()/resume() (it suspends on construction and on seek) can never
-  // freeze OUR audio.
-  const ac = new AudioContext({ sampleRate: 44100, latencyHint: "playback" });
-  const viewAc = new AudioContext({ sampleRate: 44100 });
+  // The stemplayer-js component gets its OWN silent context (viewAc) — a disconnected destination so
+  // it never makes sound and its suspend/resume can't touch our audio. Our playback context `ac` is
+  // NOT created here: on iOS/WebKit audioWorklet is only exposed once the context is "running", which
+  // requires resuming inside a user gesture — so `ac` is created and unlocked lazily on the first
+  // gesture (see unlockAudio / ensureCore below).
+  const viewAc = new AudioContext();
   const silent = viewAc.createGain();
   silent.gain.value = 0; // never connected to viewAc.destination → truly silent
 
@@ -97,42 +97,21 @@ async function main() {
 
   const stemEls = [...player.querySelectorAll("stemplayer-js-stem")];
 
-  // ── Headless stretch core owns the audio ────────────────────────────────────────────────────
-  const engine = createStretchEngine({ ac, base, stems: manifest.stems });
+  // ── Headless stretch core owns the audio (context + core created on the first gesture) ────────
+  let ac = null;            // playback AudioContext — created inside ensureCore (see below)
+  let engine = null;        // stretch core — created once `ac` exists
+  let pendingRate = 1;      // rate chosen before the core exists; applied on load
 
   const pushGains = () => {
+    if (!engine) return;
     const soloActive = stemEls.some((el) => el.solo === "on");
     stemEls.forEach((el, i) => engine.setGain(i, effectiveGain(el, soloActive)));
   };
 
-  // Load the core (parse m3u8s + create the signalsmith AudioWorklet nodes) LAZILY, on the first
-  // play or seek — NOT at page load. On iOS/WebKit `ac.audioWorklet` is undefined until the
-  // AudioContext has been resumed inside a user gesture, so loading eagerly throws there
-  // ("undefined is not an object (evaluating 'audioContext.audioWorklet.addModule')"). Resuming
-  // first, from within the gesture, makes the worklet available. `ac.resume()` therefore has to be
-  // kicked off synchronously inside the handler (before any await), which it is — ensureCore() runs
-  // up to its first await synchronously. The de-duped promise means a concurrent play+seek loads once.
-  let coreLoading = null;
-  const ensureCore = () => {
-    if (!coreLoading) {
-      coreLoading = (async () => {
-        await ac.resume();
-        await engine.load();
-        pushGains();
-      })().catch((e) => {
-        coreLoading = null; // let the next gesture retry
-        showError(`Couldn't initialise stretch core — ${e.message}`);
-        throw e;
-      });
-    }
-    return coreLoading;
-  };
-
-  // Drive the component's visual playhead from the core's source-time, keep the mix gains in step,
-  // and reflect play/pause state onto the native controls button (controls.isPlaying flips its icon).
-  // `applyPlayhead` writes the position unconditionally; `setPlayhead` (used for the core's periodic
-  // ticks) is SUPPRESSED while the user is scrubbing the seek bar or a seek is still settling —
-  // otherwise a tick would overwrite the thumb the user is dragging and it visibly jerks back.
+  // Drive the component's visual playhead from the core's source-time. `applyPlayhead` writes
+  // unconditionally; `setPlayhead` (the core's periodic ticks) is SUPPRESSED while the user is
+  // scrubbing the seek bar or a seek is still settling — otherwise a tick overwrites the thumb the
+  // user is dragging and it visibly jerks back.
   let scrubbing = false;    // pointer held on the transport (a seek drag may be in progress)
   let seekSettling = false; // a seek was requested and not yet applied to the core
   const applyPlayhead = (t, pct) => {
@@ -141,14 +120,68 @@ async function main() {
     controls.currentPct = pct;
   };
   const setPlayhead = (t, pct) => { if (scrubbing || seekSettling) return; applyPlayhead(t, pct); };
-  engine.on("time", ({ time, pct }) => setPlayhead(time, pct));
-  engine.on("state", ({ playing }) => { controls.isPlaying = playing; });
-  engine.on("end", () => { controls.isPlaying = false; });
-  engine.on("error", (err) => console.warn("[stretch] segment feed error", err));
 
-  // The component's own volume/mute/solo controls (wide-layout faders + buttons) and our mobile
-  // rows both mutate the stem props; recompute our gains whenever they change. (input = fader drag,
-  // click = mute/solo.)
+  // iOS/WebKit audio unlock. Two hard WebKit facts drive this: (1) `audioContext.audioWorklet` is
+  // UNDEFINED until the context is actually "running" — merely creating it inside a gesture is not
+  // enough; and (2) a bare resume() often will NOT flip an iOS context to running — you must also
+  // START a node in the same gesture. So unlockAudio() creates `ac`, plays a 1-sample silent buffer
+  // (the classic iOS kick), and resumes — all SYNCHRONOUSLY inside a genuine gesture. Once a context
+  // has been unlocked this way, later resume() calls work even outside a gesture.
+  const unlockAudio = () => {
+    if (!ac) ac = new AudioContext({ latencyHint: "playback" });
+    try {
+      const src = ac.createBufferSource();
+      src.buffer = ac.createBuffer(1, 1, 22050);
+      src.connect(ac.destination);
+      src.start(0);
+    } catch { /* the unlock kick is best-effort */ }
+    ac.resume().catch(() => {});
+  };
+
+  // Build the stretch core LAZILY on the first gesture (play/seek), NOT at page load. We wait for the
+  // context to reach "running" — because audioWorklet doesn't exist until then on iOS — re-nudging
+  // resume() each tick (harmless once it's been unlocked in a gesture), then build the core and load
+  // it. If audioWorklet is still absent once running, this WebKit build genuinely lacks AudioWorklet
+  // and we surface that rather than crash opaquely inside addModule.
+  let coreLoading = null;
+  const ensureCore = () => {
+    if (!coreLoading) {
+      coreLoading = (async () => {
+        if (!ac) ac = new AudioContext({ latencyHint: "playback" });
+        for (let i = 0; i < 150 && ac.state !== "running"; i++) {
+          ac.resume().catch(() => {});
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        // AudioWorklet (which the whole stretch core is built on) is only exposed in a SECURE CONTEXT
+        // — HTTPS, or localhost which the spec treats as secure. It is missing over plain HTTP on a
+        // LAN IP (e.g. a phone hitting the dev server at http://192.168.x.x:8000), even though the
+        // context is "running". The deployed site is HTTPS, so this only bites bare-IP dev testing.
+        // Fail cleanly with an accurate message (flagged so the generic catch doesn't clobber it).
+        if (!ac.audioWorklet) {
+          showError(!window.isSecureContext
+            ? "The slow-down engine needs a secure (HTTPS) connection — the browser disables its audio engine over plain HTTP on a LAN address. It works on the deployed HTTPS site and on http://localhost."
+            : "This browser can't run the slow-down engine (AudioWorklet unavailable).");
+          throw Object.assign(new Error("AudioWorklet unavailable"), { handled: true });
+        }
+        engine = createStretchEngine({ ac, base, stems: manifest.stems });
+        engine.on("time", ({ time, pct }) => setPlayhead(time, pct));
+        engine.on("state", ({ playing }) => { controls.isPlaying = playing; });
+        engine.on("end", () => { controls.isPlaying = false; });
+        engine.on("error", (err) => console.warn("[stretch] segment feed error", err));
+        await engine.load();
+        engine.setRate(pendingRate);
+        pushGains();
+      })().catch((e) => {
+        coreLoading = null; // let the next gesture retry
+        if (!e?.handled) showError(`Couldn't initialise stretch core — ${e.message}`);
+        throw e;
+      });
+    }
+    return coreLoading;
+  };
+
+  // The component's volume/mute/solo controls (wide faders + buttons) and our mobile rows mutate the
+  // stem props; recompute our gains whenever they change (input = fader drag, click = mute/solo).
   playerEl.addEventListener("input", pushGains);
   playerEl.addEventListener("click", pushGains);
 
@@ -158,14 +191,27 @@ async function main() {
   // the host fires FIRST (on the way down to the controls target); stopPropagation there prevents the
   // component's silent controller from playing. We route to our core instead, and the core's `state`
   // event (above) sets controls.isPlaying so the button still shows the correct play/pause icon.
-  player.addEventListener("controls:play", (e) => { e.stopPropagation(); ensureCore().then(() => engine.play()).catch(() => {}); }, true);
-  player.addEventListener("controls:pause", (e) => { e.stopPropagation(); engine.pause(); }, true);
+  player.addEventListener("controls:play", (e) => {
+    e.stopPropagation();
+    ensureCore().then(() => engine.play()).catch(() => {});
+  }, true);
+  player.addEventListener("controls:pause", (e) => { e.stopPropagation(); if (engine) engine.pause(); }, true);
 
-  // Warm the core on the FIRST real interaction anywhere on the page (a genuine gesture — synthetic
-  // events don't count on iOS), so the worklet is usually ready by the time the user hits play rather
-  // than loading on the play tap itself. load() only parses m3u8s + builds nodes here; the heavy
+  // Unlock + warm the core on the FIRST genuine gesture anywhere on the page (synthetic events don't
+  // count on iOS). We bind to touchend/mousedown/keydown — the events iOS accepts as audio-activation
+  // triggers; pointer events do NOT reliably count. unlockAudio() runs synchronously in the handler
+  // (so the gesture applies to the silent-buffer kick + resume), then we kick the async core load so
+  // the worklet is usually ready by the play tap. load() only parses m3u8s + builds nodes; the heavy
   // segment decoding still waits for actual playback, so warming early is cheap.
-  window.addEventListener("pointerdown", () => { ensureCore().catch(() => {}); }, { once: true, capture: true });
+  let warmed = false;
+  const warm = () => {
+    if (warmed) return;
+    warmed = true;
+    unlockAudio();
+    ensureCore().catch(() => {});
+  };
+  ["touchend", "mousedown", "keydown"].forEach((type) =>
+    window.addEventListener(type, warm, { capture: true }));
 
   // Scrub guard: a pointer held anywhere on the transport (the native seek bar lives there) means the
   // user may be dragging the playhead — freeze the periodic playhead writes until they let go.
@@ -207,7 +253,7 @@ async function main() {
   rate.value = "1";
   const paintRate = () => { rateVal.textContent = `${Number(rate.value).toFixed(2)}×`; };
   paintRate();
-  rate.addEventListener("input", () => { engine.setRate(Number(rate.value)); paintRate(); });
+  rate.addEventListener("input", () => { pendingRate = Number(rate.value); if (engine) engine.setRate(pendingRate); paintRate(); });
   rateWrap.append(document.createTextNode("Speed "), rate, rateVal);
   bar.append(rateWrap);
   playerEl.before(bar);
