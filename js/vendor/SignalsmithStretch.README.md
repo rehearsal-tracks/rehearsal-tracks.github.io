@@ -1,5 +1,31 @@
 # Signalsmith Stretch Web
 
+> ## ⚠️ Local vendoring & patches (interactive-stem-player)
+>
+> This is a **vendored, locally-patched** copy of `signalsmith-stretch` **v1.3.2** (MIT, © Geraint
+> Luff — see `SignalsmithStretch.package.json`). We check it into the repo (rather than depend on it
+> from a registry/CDN) because it needs a source fix, and because the whole time-stretch feature is
+> built on it (`js/stretch/core.js`). It is used only on the experimental slow-down page.
+>
+> **Local modifications — do not lose these if you upgrade:**
+>
+> 1. **Buffer-fill position tracking** — in `SignalsmithStretch.mjs`, search for the comment
+>    `// LOCAL PATCH`. Upstream mis-tracks positions across more than one `addBuffers()` chunk (it
+>    only ever loads one buffer in its own demo), which throws `RangeError: offset is out of bounds`
+>    roughly every segment boundary once you stream many buffers with `dropBuffers()` behind the read
+>    head — which is exactly what our core does. The patch makes `audioSamples` track the start of the
+>    current buffer (advance by the full buffer length) and advances the window cursor `inputSamples`
+>    by each copied `count`. Full rationale is in the inline comment.
+>
+> **Related (NOT a patch to this file, but required):** the node must be created with
+> `numberOfInputs: 1` (the library default). With `0`, `process()` reads `inputList[0].length` on an
+> empty input list and throws. See the comment in `js/stretch/core.js` where the node is created.
+>
+> **Upgrading:** re-download upstream, then re-apply the `LOCAL PATCH` block above (diff against the
+> previous vendored file first). The `.mjs` has a banner at the top of the file repeating this warning.
+
+---
+
 This is an official release of the Signalsmith Stretch library for Web Audio, using WASM/AudioWorklet.  It includes both plain `.js` (UMD), and ES6 `.mjs` versions.
 
 ## How to use it

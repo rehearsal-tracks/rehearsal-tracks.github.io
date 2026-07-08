@@ -1,3 +1,8 @@
+// ⚠️ VENDORED + LOCALLY PATCHED — signalsmith-stretch v1.3.2 (MIT, Geraint Luff).
+// This is NOT a pristine upstream copy: it carries a local fix to the buffer-fill loop (search
+// "LOCAL PATCH") that streaming playback depends on. Do NOT overwrite it by re-downloading upstream
+// without re-applying that patch. See SignalsmithStretch.README.md ("Local vendoring & patches").
+
 let module = {}, exports = {};
 
 var SignalsmithStretch = (() => {
