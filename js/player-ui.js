@@ -153,7 +153,9 @@ export const widthToMode = (w) => (w >= 670 ? "lg" : w >= 600 ? "sm" : "xs");
 // (they carry the waveforms) — on narrow widths CSS hides them and our mobile list takes over.
 export function syncLayout(player, playerEl) {
   const mode = widthToMode(player.clientWidth);
-  playerEl.classList.toggle("is-mobile", mode !== "lg");
+  const isMobile = mode !== "lg";
+  playerEl.classList.toggle("is-mobile", isMobile);
+  playerEl.parentElement?.classList.toggle("is-mobile", isMobile);
   for (const el of player.querySelectorAll("stemplayer-js-controls, stemplayer-js-stem")) {
     if (el.displayMode !== mode) el.displayMode = mode;
   }

@@ -217,12 +217,13 @@ async function main() {
   // ── Playhead state + transport interception for stretch mode ─────────────────────────────────
   let scrubbing = false;    // pointer held on the transport (a seek drag may be in progress)
   let seekSettling = false; // a seek was requested and not yet reflected in the core
+  let mobScrubbing = false; // pointer held on the mobile transport scrubber
   const applyPlayhead = (t, pct) => {
     stemEls.forEach((el) => { el.currentPct = pct; });
     controls.currentTime = t;
     controls.currentPct = pct;
   };
-  const setPlayhead = (t, pct) => { if (scrubbing || seekSettling) return; applyPlayhead(t, pct); };
+  const setPlayhead = (t, pct) => { if (scrubbing || seekSettling || mobScrubbing) return; applyPlayhead(t, pct); };
 
   // Transport interceptors for stretch mode. Capture-phase fires BEFORE the component's own
   // handler; stopPropagation prevents the HLS engine from ever playing again after the swap.
@@ -241,7 +242,7 @@ async function main() {
   // Scrub guard: a pointer held anywhere on the transport may mean the user is dragging the
   // seek bar — freeze the periodic playhead writes until they let go.
   controls.addEventListener("pointerdown", () => { scrubbing = true; }, true);
-  const endScrub = () => { scrubbing = false; };
+  const endScrub = () => { scrubbing = false; mobScrubbing = false; };
   window.addEventListener("pointerup", endScrub);
   window.addEventListener("pointercancel", endScrub);
 
@@ -302,7 +303,7 @@ async function main() {
     if (wasPlaying) engine.play().catch(() => {});
   };
 
-  // ── Speed slider ─────────────────────────────────────────────────────────────────────────────
+  // ── Desktop speed bar (.stretch-bar) ─────────────────────────────────────────────────────────
   const bar = document.createElement("div");
   bar.className = "stretch-bar";
   const rateWrap = document.createElement("label");
@@ -312,24 +313,137 @@ async function main() {
   const rateInput = document.createElement("input");
   rateInput.type = "range";
   rateInput.min = "0.7"; rateInput.max = "1"; rateInput.step = "0.05"; rateInput.value = "1";
-  const paintRate = () => { rateVal.textContent = `${Number(rateInput.value).toFixed(2)}×`; };
-  paintRate();
-  rateInput.addEventListener("input", () => {
-    pendingRate = Number(rateInput.value);
-    paintRate();
-    if (stretchActive) {
-      engine.setRate(pendingRate);   // already on core: cheap reschedule, no swap
-    } else if (pendingRate < 1) {
-      triggerSwap();                 // first sub-1.0× drag: fire-and-forget
-    }
-  });
   rateWrap.append(document.createTextNode("Speed "), rateInput, rateVal);
   bar.append(rateWrap);
   playerEl.before(bar);
 
+  // ── Mobile transport bar (.mobile-bar) ───────────────────────────────────────────────────────
+  // Portrait layout: Row 1 = [▶ play][⟲ loop] | [Speed slider]; Row 2 = [full-width scrubber].
+  // On is-mobile, CSS hides .stretch-bar and the native stemplayer-js-controls row (which remains
+  // in DOM for engine wiring) and shows this bar instead.
+  const mobileBar = document.createElement("div");
+  mobileBar.className = "mobile-bar";
+
+  const mobRow1 = document.createElement("div");
+  mobRow1.className = "mobile-bar__row1";
+
+  const mobBtns = document.createElement("div");
+  mobBtns.className = "mobile-bar__btns";
+  const mobPlayBtn = document.createElement("button");
+  mobPlayBtn.className = "mobile-bar__play";
+  mobPlayBtn.setAttribute("aria-label", "Play");
+  mobPlayBtn.innerHTML =
+    `<svg class="mob-icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>` +
+    `<svg class="mob-icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+  const mobLoopBtn = document.createElement("button");
+  mobLoopBtn.className = "mobile-bar__loop";
+  mobLoopBtn.setAttribute("aria-label", "Loop");
+  mobLoopBtn.innerHTML =
+    `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>`;
+  mobBtns.append(mobPlayBtn, mobLoopBtn);
+
+  const mobSpeedWrap = document.createElement("label");
+  mobSpeedWrap.className = "mobile-bar__speed";
+  const mobRateInput = document.createElement("input");
+  mobRateInput.type = "range";
+  mobRateInput.min = "0.7"; mobRateInput.max = "1"; mobRateInput.step = "0.05"; mobRateInput.value = "1";
+  const mobRateVal = document.createElement("span");
+  mobRateVal.className = "mobile-bar__rateval";
+  mobSpeedWrap.append(document.createTextNode("Speed "), mobRateInput, mobRateVal);
+  mobRow1.append(mobBtns, mobSpeedWrap);
+
+  const mobRow2 = document.createElement("div");
+  mobRow2.className = "mobile-bar__row2";
+  const mobTimeEl = document.createElement("span");
+  mobTimeEl.className = "mobile-bar__time";
+  mobTimeEl.textContent = "0:00";
+  const mobScrubber = document.createElement("input");
+  mobScrubber.type = "range";
+  mobScrubber.className = "mobile-bar__scrubber seek";
+  mobScrubber.min = "0"; mobScrubber.max = "1"; mobScrubber.step = "0.001"; mobScrubber.value = "0";
+  mobScrubber.setAttribute("aria-label", "Seek");
+  const mobDurEl = document.createElement("span");
+  mobDurEl.className = "mobile-bar__dur";
+  mobDurEl.textContent = "0:00";
+  mobRow2.append(mobTimeEl, mobScrubber, mobDurEl);
+
+  mobileBar.append(mobRow1, mobRow2);
+  playerEl.before(mobileBar);
+
+  // Shared rate-apply: keeps both sliders + displays in sync and drives the engine/swap.
+  const applyRate = (val) => {
+    pendingRate = val;
+    const label = `${val.toFixed(2)}×`;
+    rateVal.textContent = label;
+    mobRateVal.textContent = label;
+    rateInput.value = String(val);
+    mobRateInput.value = String(val);
+    if (stretchActive) engine.setRate(val);
+    else if (val < 1) triggerSwap();
+  };
+  applyRate(1);   // initial paint
+
+  rateInput.addEventListener("input", () => applyRate(Number(rateInput.value)));
+  mobRateInput.addEventListener("input", () => applyRate(Number(mobRateInput.value)));
+
+  // Play/pause: proxy the same events the native button dispatches.
+  mobPlayBtn.addEventListener("click", () => {
+    controls.dispatchEvent(controls.isPlaying
+      ? new Event("controls:pause", { bubbles: true })
+      : new Event("controls:play", { bubbles: true }));
+  });
+
+  // Loop: dispatch controls:loop — stemplayer-js handles the toggle on its internal controller.
+  mobLoopBtn.addEventListener("click", () => {
+    controls.dispatchEvent(new CustomEvent("controls:loop", { bubbles: true }));
+  });
+
+  // Mobile scrubber — two modes:
+  //   Normal: dispatch controls:seek (fraction 0–1) so stemplayer-js seeks the HLS engine.
+  //   Stretch: bypass stemplayer-js and seek the stretch core directly; shares seekTimer + seekSettling
+  //            with the player.addEventListener("seek") handler defined earlier.
+  mobScrubber.addEventListener("pointerdown", () => { mobScrubbing = true; });
+  mobScrubber.addEventListener("input", () => {
+    const dur = controls.duration ?? (stretchActive ? engine?.duration : 0) ?? 0;
+    if (dur <= 0) return;
+    const pct = Number(mobScrubber.value);
+    const t = pct * dur;
+    mobTimeEl.textContent = formatTime(t);
+    if (stretchActive) {
+      seekSettling = true;
+      clearTimeout(seekTimer);
+      seekTimer = setTimeout(async () => {
+        await engine.seek(t);
+        seekSettling = false;
+        applyPlayhead(engine.currentTime, engine.duration ? engine.currentTime / engine.duration : 0);
+      }, 120);
+    } else {
+      controls.dispatchEvent(new CustomEvent("controls:seek", { bubbles: true, detail: pct }));
+    }
+  });
+
+  // rAF loop: keep mobile bar state in sync with playback (works for both HLS and stretch modes).
+  (function tickMobileBar() {
+    const t = controls.currentTime ?? 0;
+    const dur = controls.duration ?? 0;
+    if (!mobScrubbing) {
+      if (dur > 0) mobScrubber.value = String(t / dur);
+      mobTimeEl.textContent = formatTime(t);
+    }
+    if (dur > 0) mobDurEl.textContent = formatTime(dur);
+    mobPlayBtn.classList.toggle("is-playing", !!controls.isPlaying);
+    mobLoopBtn.classList.toggle("is-on", !!controls.loop);
+    requestAnimationFrame(tickMobileBar);
+  }());
+
   // Keep the layout (mobile faders vs. native waveform rows) in sync with the player width, and
   // nudge the resize stemplayer-js needs to (re)compute its waveform pixel-width. See player-ui.js.
   observeLayout(player, playerEl);
+}
+
+function formatTime(s) {
+  const m = Math.floor(s / 60);
+  return `${m}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
 }
 
 // Compute effective per-stem gain from the component's live props (volume/muted/solo).

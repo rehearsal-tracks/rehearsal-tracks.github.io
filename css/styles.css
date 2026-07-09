@@ -561,7 +561,7 @@ body { padding-top: 64px; }
 .downloads__usage { color: var(--text-dim); font-size: 12px; margin: 12px 2px 0; }
 
 
-/* ── Speed (slow-down) transport bar — stream.html and stretch.html ─────────────────────────── */
+/* ── Speed (slow-down) transport bar — stream.html ───────────────────────────────────────────── */
 .stretch-bar {
   display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
   background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius);
@@ -573,3 +573,67 @@ body { padding-top: 64px; }
   color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600;
   min-width: 3.2ch; text-align: right;
 }
+
+/* ── Mobile transport bar (.mobile-bar) — portrait phone layout ──────────────────────────────
+   On is-mobile (set on <main class="player"> by syncLayout), .stretch-bar and the native
+   stemplayer-js-controls row are hidden; .mobile-bar takes over with a 2-row layout:
+     Row 1: [▶ play + ⟲ loop (left)]  |  [Speed slider (right)]
+     Row 2: 0:00  [full-width scrubber]  6:47                               */
+.player.is-mobile .stretch-bar { display: none; }
+.player.is-mobile stemplayer-js-controls {
+  height: 0 !important; min-height: 0; overflow: hidden; pointer-events: none;
+}
+.mobile-bar { display: none; }
+.player.is-mobile .mobile-bar {
+  display: flex; flex-direction: column;
+  background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius);
+  margin: 0 0 16px;
+}
+
+/* Row 1: transport buttons (left) + speed slider (right) */
+.mobile-bar__row1 {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.mobile-bar__btns { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
+.mobile-bar__play {
+  width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff; display: grid; place-items: center;
+  box-shadow: 0 6px 18px -6px var(--accent-glow);
+  transition: transform 0.15s var(--ease);
+}
+.mobile-bar__play:active { transform: scale(0.93); }
+.mobile-bar__play svg { width: 22px; height: 22px; fill: currentColor; }
+.mob-icon-pause { display: none; }
+.mobile-bar__play.is-playing .mob-icon-play { display: none; }
+.mobile-bar__play.is-playing .mob-icon-pause { display: block; }
+.mobile-bar__loop {
+  width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--bg-elev-2); color: var(--text-dim); cursor: pointer;
+  display: grid; place-items: center;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.mobile-bar__loop.is-on { color: var(--accent); border-color: var(--accent); background: rgba(139,255,31,0.12); }
+.mobile-bar__loop svg { width: 18px; height: 18px; fill: currentColor; }
+.mobile-bar__speed {
+  flex: 1; display: flex; align-items: center; gap: 8px;
+  color: var(--text-dim); font-size: 14px;
+}
+.mobile-bar__speed input[type="range"] { flex: 1; accent-color: var(--accent); min-width: 60px; }
+.mobile-bar__rateval {
+  color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600;
+  min-width: 3.2ch; text-align: right;
+}
+
+/* Row 2: time + full-width scrubber + duration */
+.mobile-bar__row2 {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px 14px;
+}
+.mobile-bar__time, .mobile-bar__dur {
+  font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums;
+  flex: 0 0 auto; white-space: nowrap;
+}
+.mobile-bar__scrubber { flex: 1 1 auto; min-width: 0; }
