@@ -576,27 +576,38 @@ body { padding-top: 64px; }
 
 /* ── Mobile transport bar (.mobile-bar) — portrait phone layout ──────────────────────────────
    On is-mobile (set on <main class="player"> by syncLayout), .stretch-bar and the native
-   stemplayer-js-controls row are hidden; .mobile-bar takes over with a 2-row layout:
-     Row 1: [▶ play + ⟲ loop (left)]  |  [Speed slider (right)]
-     Row 2: 0:00  [full-width scrubber]  6:47                               */
+   stemplayer-js-controls row are hidden; .mobile-bar takes over with a tetris-shaped layout:
+     Top-left:  [▶ play + ⟲ loop]    ← L-card top piece (open right + open bottom borders)
+     Top-right: [Speed slider]        ← separate disconnected card (own rounded rectangle)
+     Bottom:    0:00 [scrubber] 6:47  ← L-card bottom piece (full width, open top border)
+   The play/loop and scrubber share continuous left/bottom/right borders to form the L-shape;
+   the speed card floats in the notch with an 8px column gap.                      */
 .player.is-mobile .stretch-bar { display: none; }
 .player.is-mobile stemplayer-js-controls {
   height: 0 !important; min-height: 0; overflow: hidden; pointer-events: none;
 }
 .mobile-bar { display: none; }
 .player.is-mobile .mobile-bar {
-  display: flex; flex-direction: column;
-  background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 0;
   margin: 0 0 16px;
 }
 
-/* Row 1: transport buttons (left) + speed slider (right) */
-.mobile-bar__row1 {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 16px 10px;
-  border-bottom: 1px solid var(--line);
+/* L-card top piece: play + loop buttons */
+.mobile-bar__btns {
+  grid-row: 1; grid-column: 1;
+  display: flex; gap: 8px; align-items: center;
+  padding: 12px 14px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  border-bottom: none;
+  border-right: none;
+  border-radius: var(--radius) 0 0 0;
 }
-.mobile-bar__btns { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
 .mobile-bar__play {
   width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
@@ -617,8 +628,15 @@ body { padding-top: 64px; }
 }
 .mobile-bar__loop.is-on { color: var(--accent); border-color: var(--accent); background: rgba(139,255,31,0.12); }
 .mobile-bar__loop svg { width: 18px; height: 18px; fill: currentColor; }
+
+/* Separate speed card: top-right, disconnected from the L-card */
 .mobile-bar__speed {
-  flex: 1; display: flex; align-items: center; gap: 8px;
+  grid-row: 1; grid-column: 2;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   color: var(--text-dim); font-size: 14px;
 }
 .mobile-bar__speed input[type="range"] { flex: 1; accent-color: var(--accent); min-width: 60px; }
@@ -627,10 +645,17 @@ body { padding-top: 64px; }
   min-width: 3.2ch; text-align: right;
 }
 
-/* Row 2: time + full-width scrubber + duration */
-.mobile-bar__row2 {
+/* L-card bottom piece: full-width scrubber row */
+.mobile-bar__scrubber-row {
+  grid-row: 2; grid-column: 1 / -1;
   display: flex; align-items: center; gap: 10px;
   padding: 10px 16px 14px;
+  background: var(--bg-elev);
+  border-top: none;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0 var(--radius) var(--radius) var(--radius);
 }
 .mobile-bar__time, .mobile-bar__dur {
   font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums;

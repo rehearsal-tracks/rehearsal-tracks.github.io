@@ -324,9 +324,6 @@ async function main() {
   const mobileBar = document.createElement("div");
   mobileBar.className = "mobile-bar";
 
-  const mobRow1 = document.createElement("div");
-  mobRow1.className = "mobile-bar__row1";
-
   const mobBtns = document.createElement("div");
   mobBtns.className = "mobile-bar__btns";
   const mobPlayBtn = document.createElement("button");
@@ -350,10 +347,9 @@ async function main() {
   const mobRateVal = document.createElement("span");
   mobRateVal.className = "mobile-bar__rateval";
   mobSpeedWrap.append(document.createTextNode("Speed "), mobRateInput, mobRateVal);
-  mobRow1.append(mobBtns, mobSpeedWrap);
 
   const mobRow2 = document.createElement("div");
-  mobRow2.className = "mobile-bar__row2";
+  mobRow2.className = "mobile-bar__scrubber-row";
   const mobTimeEl = document.createElement("span");
   mobTimeEl.className = "mobile-bar__time";
   mobTimeEl.textContent = "0:00";
@@ -367,7 +363,7 @@ async function main() {
   mobDurEl.textContent = "0:00";
   mobRow2.append(mobTimeEl, mobScrubber, mobDurEl);
 
-  mobileBar.append(mobRow1, mobRow2);
+  mobileBar.append(mobBtns, mobSpeedWrap, mobRow2);
   playerEl.before(mobileBar);
 
   // Shared rate-apply: keeps both sliders + displays in sync and drives the engine/swap.
