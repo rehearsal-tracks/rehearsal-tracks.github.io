@@ -214,6 +214,94 @@ async function main() {
   }
   player.addEventListener("loading-end", restoreSolo);
 
+  // ── Playhead state + transport interception for stretch mode ─────────────────────────────────
+  let scrubbing = false;    // pointer held on the transport (a seek drag may be in progress)
+  let seekSettling = false; // a seek was requested and not yet reflected in the core
+  const applyPlayhead = (t, pct) => {
+    stemEls.forEach((el) => { el.currentPct = pct; });
+    controls.currentTime = t;
+    controls.currentPct = pct;
+  };
+  const setPlayhead = (t, pct) => { if (scrubbing || seekSettling) return; applyPlayhead(t, pct); };
+
+  // Transport interceptors for stretch mode. Capture-phase fires BEFORE the component's own
+  // handler; stopPropagation prevents the HLS engine from ever playing again after the swap.
+  // While stretchActive=false these return early, letting the component handle events normally.
+  player.addEventListener("controls:play", (e) => {
+    if (!stretchActive) return;
+    e.stopPropagation();
+    engine.play().catch(() => {});
+  }, true);
+  player.addEventListener("controls:pause", (e) => {
+    if (!stretchActive) return;
+    e.stopPropagation();
+    if (engine) engine.pause();
+  }, true);
+
+  // Scrub guard: a pointer held anywhere on the transport may mean the user is dragging the
+  // seek bar — freeze the periodic playhead writes until they let go.
+  controls.addEventListener("pointerdown", () => { scrubbing = true; }, true);
+  const endScrub = () => { scrubbing = false; };
+  window.addEventListener("pointerup", endScrub);
+  window.addEventListener("pointercancel", endScrub);
+
+  // Seek interception. In shipped mode the component handles seek natively; we step aside.
+  // In stretch mode we debounce the core's expensive dropBuffers/refeed to once per scrub,
+  // then force the final position onto the playhead.
+  let seekTimer;
+  player.addEventListener("seek", (e) => {
+    if (!stretchActive) return;
+    if (!e.detail || typeof e.detail.t !== "number") return;
+    seekSettling = true;
+    const target = e.detail.t;
+    clearTimeout(seekTimer);
+    seekTimer = setTimeout(async () => {
+      await engine.seek(target);
+      seekSettling = false;
+      applyPlayhead(engine.currentTime, engine.duration ? engine.currentTime / engine.duration : 0);
+    }, 120);
+  });
+
+  let swapping = false; // prevents concurrent swap attempts (e.g. two rapid slider events)
+  const triggerSwap = async () => {
+    if (stretchActive || swapping) return;
+    swapping = true;
+
+    // Capture shipped-engine state before we change anything.
+    const pos = controls.currentTime ?? 0;
+    const wasPlaying = !!controls.isPlaying;
+
+    // Pause the HLS engine. We dispatch controls:pause as a normal (non-capture) event from
+    // the controls element so the component's own controller handles it. (stretchActive is
+    // still false, so our capture interceptor won't swallow it.)
+    if (wasPlaying) {
+      controls.dispatchEvent(new CustomEvent("controls:pause", { bubbles: true, composed: true }));
+    }
+    prefetchCtl.pause();
+
+    try {
+      await ensureCore();
+    } catch {
+      // Core failed — roll back and let the user retry.
+      prefetchCtl.resume();
+      swapping = false;
+      return;
+    }
+
+    // Wire core events → UI feedback.
+    engine.on("time", ({ time, pct }) => setPlayhead(time, pct));
+    engine.on("state", ({ playing }) => { controls.isPlaying = playing; });
+    engine.on("end", () => { controls.isPlaying = false; });
+    engine.on("error", (err) => console.warn("[stretch] segment feed error", err));
+
+    // Seek to the captured position, then play if the user was already playing.
+    await engine.seek(pos);
+    stretchActive = true;  // set before play so the interceptors are live
+    swapping = false;
+    pushGains();           // re-apply fader/mute/solo state to the stretch core
+    if (wasPlaying) engine.play().catch(() => {});
+  };
+
   // ── Speed slider ─────────────────────────────────────────────────────────────────────────────
   const bar = document.createElement("div");
   bar.className = "stretch-bar";
@@ -229,7 +317,11 @@ async function main() {
   rateInput.addEventListener("input", () => {
     pendingRate = Number(rateInput.value);
     paintRate();
-    // Swap + routing wired in Task 2.
+    if (stretchActive) {
+      engine.setRate(pendingRate);   // already on core: cheap reschedule, no swap
+    } else if (pendingRate < 1) {
+      triggerSwap();                 // first sub-1.0× drag: fire-and-forget
+    }
   });
   rateWrap.append(document.createTextNode("Speed "), rateInput, rateVal);
   bar.append(rateWrap);
