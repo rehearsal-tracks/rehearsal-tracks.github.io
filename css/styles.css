@@ -561,7 +561,7 @@ body { padding-top: 64px; }
 .downloads__usage { color: var(--text-dim); font-size: 12px; margin: 12px 2px 0; }
 
 
-/* ── Experimental slow-down transport bar (stretch.html) ─────────────────────────────────────── */
+/* ── Speed (slow-down) transport bar — stream.html and stretch.html ─────────────────────────── */
 .stretch-bar {
   display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
   background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius);
