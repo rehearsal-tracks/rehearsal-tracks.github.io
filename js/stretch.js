@@ -121,20 +121,14 @@ async function main() {
   };
   const setPlayhead = (t, pct) => { if (scrubbing || seekSettling) return; applyPlayhead(t, pct); };
 
-  // iOS/WebKit audio unlock. Two hard WebKit facts drive this: (1) `audioContext.audioWorklet` is
+  // iOS/WebKit audio unlock. The hard WebKit fact that drives this: `audioContext.audioWorklet` is
   // UNDEFINED until the context is actually "running" — merely creating it inside a gesture is not
-  // enough; and (2) a bare resume() often will NOT flip an iOS context to running — you must also
-  // START a node in the same gesture. So unlockAudio() creates `ac`, plays a 1-sample silent buffer
-  // (the classic iOS kick), and resumes — all SYNCHRONOUSLY inside a genuine gesture. Once a context
-  // has been unlocked this way, later resume() calls work even outside a gesture.
+  // enough. On iOS a context reaches "running" only after resume() is called inside a genuine user
+  // gesture, so unlockAudio() creates `ac` and resumes it SYNCHRONOUSLY inside the gesture handler.
+  // Once unlocked this way, later resume() calls work even outside a gesture. (Older iOS also needed a
+  // silent-buffer "kick" started in the same gesture; a bare resume() has been reliable since iOS 16.)
   const unlockAudio = () => {
     if (!ac) ac = new AudioContext({ latencyHint: "playback" });
-    try {
-      const src = ac.createBufferSource();
-      src.buffer = ac.createBuffer(1, 1, 22050);
-      src.connect(ac.destination);
-      src.start(0);
-    } catch { /* the unlock kick is best-effort */ }
     ac.resume().catch(() => {});
   };
 
