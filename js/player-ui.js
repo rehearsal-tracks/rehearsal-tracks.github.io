@@ -1,8 +1,7 @@
-// js/player-ui.js — UI building blocks shared by the standard player (stream.js) and the
-// experimental slow-down player (stretch.js). These are the pieces that render the stemplayer-js
-// component into our theme and add the custom mobile fader rows; they are audio-agnostic (they only
-// read/write the component's public props), so both the native controller and the headless stretch
-// core can sit behind them.
+// js/player-ui.js — UI building blocks for the player (stream.js). These are the pieces that
+// render the stemplayer-js component into our theme and add the custom mobile fader rows; they are
+// audio-agnostic (they only read/write the component's public props), so both the native HLS
+// controller and the headless stretch core can sit behind them.
 
 // Toxic Avenger waveform palette: murky-moss unplayed bars, toxic-green played portion (reads as
 // progress). Kept in sync with --accent in css/styles.css.
