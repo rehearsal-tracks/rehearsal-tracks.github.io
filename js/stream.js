@@ -6,6 +6,7 @@ import { mountOfflineControl } from "./offline-ui.js";
 import {
   WAVE_COLOR, WAVE_PROGRESS_COLOR, buildMobileStemRow, themeWaveform, observeLayout,
 } from "./player-ui.js";
+import { createStretchEngine } from "./stretch/core.js";
 
 const params = new URLSearchParams(location.search);
 const songId = params.get("song");
@@ -58,6 +59,13 @@ async function main() {
   // persist that instead, so unmuting later restores the right volume.
   const lastVolume = {};
 
+  // ── Stretch engine state ──────────────────────────────────────────────────────────────────────
+  let ac = null;             // real AudioContext for the stretch core (lazy — iOS needs gesture first)
+  let engine = null;         // stretch core instance; set once after the swap
+  let coreLoading = null;    // Promise while building the core; reset on failure for retry
+  let pendingRate = 1;       // rate chosen before the core exists; applied on load
+  let stretchActive = false; // true once swapped to the stretch core; never goes back to false
+
   for (const stem of manifest.stems) {
     const el = document.createElement("stemplayer-js-stem");
     el.setAttribute("label", stem.name);
@@ -87,6 +95,14 @@ async function main() {
   playerEl.appendChild(player);
   playerEl.appendChild(mobileStems);
 
+  const stemEls = [...player.querySelectorAll("stemplayer-js-stem")];
+
+  const pushGains = () => {
+    if (!engine) return;
+    const soloActive = stemEls.some((el) => el.solo === "on");
+    stemEls.forEach((el, i) => engine.setGain(i, effectiveGain(el, soloActive)));
+  };
+
   // Anticipatory prefetch: warm the browser cache with segments further ahead than the engine's
   // own ~10s window, so a slow segment on any one stem doesn't stall the whole mix. Component-
   // agnostic (warms the cache the engine reads from) and wrapped so it can never break playback.
@@ -105,6 +121,60 @@ async function main() {
     pause() { prefetch?.stop(); prefetch = null; },
   };
   prefetchCtl.resume();
+
+  // iOS/WebKit audio unlock — called synchronously inside a genuine user gesture.
+  // `audioContext.audioWorklet` is undefined until the context is actually "running",
+  // which on iOS requires resume() inside a real gesture (not a synthetic event).
+  const unlockAudio = () => {
+    if (!ac) ac = new AudioContext({ latencyHint: "playback" });
+    ac.resume().catch(() => {});
+  };
+
+  // Warm the audio context on the first genuine gesture anywhere on the page.
+  // We do NOT pre-load the stretch core here — only unlock the context so it's
+  // ready when the user drags the slider below 1.0×.
+  let warmed = false;
+  const warmAudio = () => {
+    if (warmed) return; warmed = true;
+    unlockAudio();
+  };
+  ["touchend", "mousedown", "keydown"].forEach((type) =>
+    window.addEventListener(type, warmAudio, { capture: true }));
+
+  // Build + load the stretch core. Runs at most once (guarded by coreLoading).
+  const ensureCore = () => {
+    if (!coreLoading) {
+      coreLoading = (async () => {
+        if (!ac) ac = new AudioContext({ latencyHint: "playback" });
+        // Poll until the context reaches "running". On iOS the context won't be running
+        // until resume() is called inside a gesture; we re-nudge on every tick just in case
+        // the warm handler was missed (e.g. programmatic test paths).
+        for (let i = 0; i < 150 && ac.state !== "running"; i++) {
+          ac.resume().catch(() => {});
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        // AudioWorklet requires a secure context (HTTPS or localhost). Over plain HTTP on a
+        // LAN IP (e.g. http://192.168.x.x:8000 from a phone), `audioWorklet` is undefined
+        // even when the context is "running". The deployed site is HTTPS, so this only bites
+        // bare-IP dev testing.
+        if (!ac.audioWorklet) {
+          showError(!window.isSecureContext
+            ? "The slow-down engine needs a secure (HTTPS) connection — it doesn't work over plain HTTP on a LAN address. Use the deployed site or a cloudflared tunnel."
+            : "This browser can't run the slow-down engine (AudioWorklet unavailable).");
+          throw Object.assign(new Error("AudioWorklet unavailable"), { handled: true });
+        }
+        engine = createStretchEngine({ ac, base, stems: manifest.stems });
+        await engine.load();
+        engine.setRate(pendingRate);
+        pushGains();
+      })().catch((e) => {
+        coreLoading = null; // let the next gesture retry
+        if (!e?.handled) showError(`Couldn't initialise stretch core — ${e.message}`);
+        throw e;
+      });
+    }
+    return coreLoading;
+  };
 
   // "Download for offline" control (PWA Phase B). Sits below the player; feature-gated on Cache
   // Storage and fully self-contained, so it never affects playback. Also quietly reconciles an
@@ -127,8 +197,8 @@ async function main() {
     }
   };
   const persist = debounce(() => saveMix(songId, player, lastVolume), 300);
-  playerEl.addEventListener("input", () => { captureAudibleVolumes(); persist(); });
-  playerEl.addEventListener("click", persist);
+  playerEl.addEventListener("input", () => { captureAudibleVolumes(); persist(); pushGains(); });
+  playerEl.addEventListener("click", () => { persist(); pushGains(); });
 
   // Restoring solo needs to happen AFTER the component's first render: unlike volume/muted (which
   // stick when set at creation), the stem resets `solo` to "off" during init. Re-apply the saved
@@ -144,9 +214,37 @@ async function main() {
   }
   player.addEventListener("loading-end", restoreSolo);
 
+  // ── Speed slider ─────────────────────────────────────────────────────────────────────────────
+  const bar = document.createElement("div");
+  bar.className = "stretch-bar";
+  const rateWrap = document.createElement("label");
+  rateWrap.className = "stretch-bar__rate";
+  const rateVal = document.createElement("span");
+  rateVal.className = "stretch-bar__rateval";
+  const rateInput = document.createElement("input");
+  rateInput.type = "range";
+  rateInput.min = "0.7"; rateInput.max = "1"; rateInput.step = "0.05"; rateInput.value = "1";
+  const paintRate = () => { rateVal.textContent = `${Number(rateInput.value).toFixed(2)}×`; };
+  paintRate();
+  rateInput.addEventListener("input", () => {
+    pendingRate = Number(rateInput.value);
+    paintRate();
+    // Swap + routing wired in Task 2.
+  });
+  rateWrap.append(document.createTextNode("Speed "), rateInput, rateVal);
+  bar.append(rateWrap);
+  playerEl.before(bar);
+
   // Keep the layout (mobile faders vs. native waveform rows) in sync with the player width, and
   // nudge the resize stemplayer-js needs to (re)compute its waveform pixel-width. See player-ui.js.
   observeLayout(player, playerEl);
+}
+
+// Compute effective per-stem gain from the component's live props (volume/muted/solo).
+function effectiveGain(el, soloActive) {
+  if (soloActive && el.solo !== "on") return 0;
+  if (el.muted) return 0;
+  return typeof el.volume === "number" ? el.volume : 1;
 }
 
 // ── Saved mix persistence (localStorage) ─────────────────────────────────────────────────────
