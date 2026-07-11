@@ -7,9 +7,13 @@
 // signalsmith-stretch worklet (MIT). It owns the audio; the stemplayer-js component is a silent
 // view (see js/stretch.js). Design: ~/.claude/plans/2026-07-07-stem-player-time-stretch-design.md
 //
-// One stretch node per stem → per-stem GainNode → master gain → destination. All nodes share one
-// schedule (same rate, same start, same input origin) so they stay sample-aligned; the mix is
-// trivial live gain, exactly like the old engine's per-track gain. Streaming feed: decode segments
+// One stretch node per stem → per-stem GainNode → per-stem compressor → master gain → limiter →
+// destination. All nodes share one schedule (same rate, same start, same input origin) so they stay
+// sample-aligned; the mix is trivial live gain, exactly like the old engine's per-track gain.
+// Per-stem compressors are transparent by default; a 50ms monitor watches the master output and
+// engages compression on any stem peaking above −3 dBFS while the master approaches 0 dBFS. Once
+// flagged, a stem stays compressed for 1 s after it drops below the threshold (hold timer) to
+// prevent rapid on/off pumping. The brickwall limiter is the final safety net. Streaming feed: decode segments
 // just ahead of the read head and addBuffers() them, dropBuffers() behind to cap RAM. Because we
 // never play faster than 1×, we consume source ≤ real-time and can always stay ahead of playback.
 
@@ -20,6 +24,10 @@ const LOOKAHEAD_SEC = 20;   // keep each stem decoded this far ahead of the read
 const KEEP_BEHIND_SEC = 4;  // free decoded input older than this behind the read head
 const PREBUFFER_SEC = 3;    // fill this much before the first play / after a seek
 const FEED_INTERVAL_MS = 200;
+const MONITOR_MS = 50;          // per-stem compression monitor poll rate
+const MASTER_HOT = 0.707;      // −3 dBFS in linear — master must exceed this to activate per-stem compression
+const STEM_HOT = 0.707;        // −3 dBFS in linear — per-stem flag threshold
+const HOT_HOLD_MS = 1000;      // keep a stem's compressor engaged this long after it drops below STEM_HOT
 
 // Minimal event emitter (time, end, error, buffering).
 function emitter() {
@@ -42,6 +50,10 @@ export function createStretchEngine({ ac, base, stems, fetchImpl = fetch }) {
     stem: s,
     node: null,
     gain: null,
+    compressor: null,
+    analyser: null,
+    hotUntil: 0,
+    compressed: false,
     segs: [],
     nextIdx: 0,
     fedUntil: 0,
@@ -50,7 +62,26 @@ export function createStretchEngine({ ac, base, stems, fetchImpl = fetch }) {
   }));
 
   const master = ac.createGain();
-  master.connect(ac.destination);
+
+  // Brickwall limiter: catches peaks before they clip the destination.
+  const limiter = ac.createDynamicsCompressor();
+  limiter.threshold.value = -1;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.001;
+  limiter.release.value = 0.05;
+
+  master.connect(limiter);
+  limiter.connect(ac.destination);
+
+  // Master-level meter: taps the signal between master gain and limiter so we see the pre-limited
+  // peak. Used by the per-stem compression monitor to decide whether the mix is approaching 0 dBFS.
+  const masterAnalyser = ac.createAnalyser();
+  masterAnalyser.fftSize = 2048;
+  master.connect(masterAnalyser);
+  const masterBuf = new Float32Array(2048);
+  const stemBuf = new Float32Array(2048);
+  let monitorTimer = null;
 
   let duration = 0;      // total song length (secs), from the m3u8 durations
   let rate = 1;          // current playback rate (0.7..1)
@@ -105,9 +136,28 @@ export function createStretchEngine({ ac, base, stems, fetchImpl = fetch }) {
       node.setUpdateInterval?.(0.1);
       const gain = ac.createGain();
       node.connect(gain);
-      gain.connect(master);
+
+      // Per-stem compressor: transparent by default (threshold 0 dB = nothing reaches it).
+      // The monitor lowers the threshold when this stem is flagged as hot.
+      const comp = ac.createDynamicsCompressor();
+      comp.threshold.value = 0;
+      comp.knee.value = 6;
+      comp.ratio.value = 1;
+      comp.attack.value = 0.005;
+      comp.release.value = 0.1;
+
+      // Per-stem analyser: passive tap BEFORE the compressor so we measure uncompressed level.
+      const stemAn = ac.createAnalyser();
+      stemAn.fftSize = 2048;
+
+      gain.connect(comp);
+      gain.connect(stemAn);
+      comp.connect(master);
+
       t.node = node;
       t.gain = gain;
+      t.compressor = comp;
+      t.analyser = stemAn;
     }));
 
     return { duration };
@@ -160,6 +210,58 @@ export function createStretchEngine({ ac, base, stems, fetchImpl = fetch }) {
     if (feedTimer) { clearInterval(feedTimer); feedTimer = null; }
   }
 
+  // ── Per-stem compression monitor ──────────────────────────────────────────────────────────
+  // Polled at 50 ms. Two gates: (1) master peak > −3 dBFS activates the system, (2) each stem
+  // independently checked — any stem peaking above −3 dBFS gets its compressor engaged with a
+  // 1 s hold timer. Compressor params ramp via setTargetAtTime for click-free transitions.
+  function peakOf(analyserNode, buf) {
+    analyserNode.getFloatTimeDomainData(buf);
+    let peak = 0;
+    for (let i = 0; i < buf.length; i++) {
+      const v = Math.abs(buf[i]);
+      if (v > peak) peak = v;
+    }
+    return peak;
+  }
+
+  function monitorTick() {
+    if (!playing) return;
+    const masterPeak = peakOf(masterAnalyser, masterBuf);
+    const now = performance.now();
+
+    if (masterPeak > MASTER_HOT) {
+      for (const t of tracks) {
+        if (!t.analyser) continue;
+        if (peakOf(t.analyser, stemBuf) > STEM_HOT) {
+          t.hotUntil = now + HOT_HOLD_MS;
+        }
+      }
+    }
+
+    for (const t of tracks) {
+      if (!t.compressor) continue;
+      const shouldCompress = now < t.hotUntil;
+      if (shouldCompress && !t.compressed) {
+        const when = ac.currentTime;
+        t.compressor.threshold.setTargetAtTime(-15, when, 0.01);
+        t.compressor.ratio.setTargetAtTime(6, when, 0.01);
+        t.compressed = true;
+      } else if (!shouldCompress && t.compressed) {
+        const when = ac.currentTime;
+        t.compressor.threshold.setTargetAtTime(0, when, 0.1);
+        t.compressor.ratio.setTargetAtTime(1, when, 0.1);
+        t.compressed = false;
+      }
+    }
+  }
+
+  function startMonitor() {
+    if (!monitorTimer) monitorTimer = setInterval(monitorTick, MONITOR_MS);
+  }
+  function stopMonitor() {
+    if (monitorTimer) { clearInterval(monitorTimer); monitorTimer = null; }
+  }
+
   // Schedule all nodes to (re)start reading at `relInput` (relative to feed origin) at the current
   // rate, a hair ahead of now so the worklet can compensate its latency. Shared schedule = sync.
   function scheduleAll(relInput) {
@@ -191,6 +293,7 @@ export function createStretchEngine({ ac, base, stems, fetchImpl = fetch }) {
     scheduleAll(headRel);
     playing = true;
     startFeedLoop();
+    startMonitor();
     ev.emit("state", { playing: true });
   }
 
@@ -200,6 +303,7 @@ export function createStretchEngine({ ac, base, stems, fetchImpl = fetch }) {
     playing = false;
     for (const t of tracks) t.node?.stop?.();
     stopFeedLoop();
+    stopMonitor();
     if (isEnd) { ended = true; ev.emit("end"); }
     ev.emit("state", { playing: false });
   }
@@ -249,8 +353,12 @@ export function createStretchEngine({ ac, base, stems, fetchImpl = fetch }) {
     for (const t of tracks) {
       try { t.node?.disconnect(); } catch { /* already gone */ }
       try { t.gain?.disconnect(); } catch { /* already gone */ }
+      try { t.compressor?.disconnect(); } catch { /* already gone */ }
+      try { t.analyser?.disconnect(); } catch { /* already gone */ }
     }
+    try { masterAnalyser.disconnect(); } catch { /* already gone */ }
     try { master.disconnect(); } catch { /* already gone */ }
+    try { limiter.disconnect(); } catch { /* already gone */ }
   }
 
   return {

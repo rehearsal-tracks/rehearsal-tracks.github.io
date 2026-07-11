@@ -633,17 +633,18 @@ body { padding-top: 64px; }
 .mobile-bar__speed {
   grid-row: 1; grid-column: 2;
   margin: 0 0 8px;
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 14px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px;
   background: var(--bg-elev);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  color: var(--text-dim); font-size: 14px;
+  color: var(--text-dim); font-size: 11px;
 }
-.mobile-bar__speed input[type="range"] { flex: 1; accent-color: var(--accent); min-width: 60px; }
+.mobile-bar__speed input[type="range"] { flex: 1; accent-color: var(--accent); min-width: 40px; }
 .mobile-bar__rateval {
   color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600;
   min-width: 3.2ch; text-align: right;
+  font-size: 10px;
 }
 
 /* L-card bottom piece: full-width scrubber row */
