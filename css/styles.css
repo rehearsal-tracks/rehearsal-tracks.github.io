@@ -632,13 +632,14 @@ body { padding-top: 64px; }
 /* Separate speed card: top-right, disconnected from the L-card */
 .mobile-bar__speed {
   grid-row: 1; grid-column: 2;
+  min-width: 0;
   margin: 0 0 8px;
   display: flex; align-items: center; gap: 6px;
   padding: 8px 10px;
   background: var(--bg-elev);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  color: var(--text-dim); font-size: 11px;
+  color: var(--text-dim); font-size: 12px;
 }
 .mobile-bar__speed input[type="range"] { flex: 1; accent-color: var(--accent); min-width: 40px; }
 .mobile-bar__rateval {
