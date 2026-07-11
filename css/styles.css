@@ -606,7 +606,7 @@ body { padding-top: 64px; }
   border-left: 1px solid var(--line);
   border-bottom: none;
   border-right: none;
-  border-radius: var(--radius) var(--radius) var(--radius) 0;
+  border-radius: var(--radius) var(--radius) 0 0;
 }
 .mobile-bar__play {
   width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
@@ -632,7 +632,7 @@ body { padding-top: 64px; }
 /* Separate speed card: top-right, disconnected from the L-card */
 .mobile-bar__speed {
   grid-row: 1; grid-column: 2;
-  margin: 8px 0;
+  margin: 0 0 8px;
   display: flex; align-items: center; gap: 8px;
   padding: 10px 14px;
   background: var(--bg-elev);
