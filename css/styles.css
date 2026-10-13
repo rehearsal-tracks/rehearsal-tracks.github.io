@@ -1,16 +1,28 @@
 :root {
-  /* THE TOXIC AVENGER theme: radioactive lime green + molten-orange fire horizon +
-     purple lightning, on a near-black green-tinted sky. */
-  --bg: #0a0e07;
-  --bg-elev: #12180d;
-  --bg-elev-2: #1b2411;
-  --line: #384720;
-  --text: #edf4e2;
-  --text-dim: #a0b389;
-  --accent: #8bff1f;        /* toxic lime — interactive / volume */
-  --accent-2: #ff6a1a;      /* molten orange — seek / progress / fire glow */
-  --accent-3: #a855f7;      /* lightning purple — accent glows */
-  --accent-glow: rgba(139, 255, 31, 0.5);
+  /* Theme tokens. These defaults are the "toxic" preset (js/themes/presets/toxic.js) so the page
+     renders correctly before JS runs; js/themes/apply.js overrides them per project.
+     css-sync.test.js fails if these drift from the preset. Each colour has an -rgb twin for
+     rgba(var(--x-rgb), alpha). */
+  --bg: #0a0e07;            --bg-rgb: 10, 14, 7;
+  --bg-elev: #12180d;       --bg-elev-rgb: 18, 24, 13;
+  --bg-elev-2: #1b2411;     --bg-elev-2-rgb: 27, 36, 17;
+  --line: #384720;          --line-rgb: 56, 71, 32;
+  --text: #edf4e2;          --text-rgb: 237, 244, 226;
+  --text-dim: #a0b389;      --text-dim-rgb: 160, 179, 137;
+  --accent: #8bff1f;        --accent-rgb: 139, 255, 31;    /* interactive / volume */
+  --accent-2: #ff6a1a;      --accent-2-rgb: 255, 106, 26;  /* seek / progress / fire glow */
+  --accent-3: #a855f7;      --accent-3-rgb: 168, 85, 247;  /* accent glows */
+  --on-accent: #07130a;     --on-accent-rgb: 7, 19, 10;
+  --thumb: #d8ffb0;         --thumb-rgb: 216, 255, 176;
+  --panel-top: #1c2812;     --panel-top-rgb: 28, 40, 18;
+  --panel-bottom: #10160c;  --panel-bottom-rgb: 16, 22, 12;
+  --nav-bg: #0d0f1a;        --nav-bg-rgb: 13, 15, 26;
+  --card-top: #1e2440;      --card-top-rgb: 30, 36, 64;
+  --card-bottom: #161a2c;   --card-bottom-rgb: 22, 26, 44;
+  --wave: #4f6b2e;          --wave-rgb: 79, 107, 46;
+  --wave-progress: #8bff1f; --wave-progress-rgb: 139, 255, 31;
+
+  --accent-glow: rgba(var(--accent-rgb), 0.5);
   --radius: 16px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   /* Heavy condensed display face for the poster-style headlines. */
