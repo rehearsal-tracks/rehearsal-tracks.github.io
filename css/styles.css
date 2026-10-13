@@ -54,7 +54,8 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* The toxic/fire/lightning corner glows, on a fixed layer behind all content so only they pulse
+/* The corner glows (accent-3 / accent-2 / accent tokens — purple lightning, fire, toxic haze in
+   the toxic preset), on a fixed layer behind all content so only they pulse
    (the content above stays crisp). It slowly breathes — opacity + a hair of scale — to read as a
    radioactive glow. position:fixed pulls it out of the body's grid flow so it doesn't affect
    centering; z-index:-2 keeps it behind everything, INCLUDING the lava-lamp goo layer (z-index:-1)
@@ -67,11 +68,11 @@ body::before {
   pointer-events: none;
   background:
     /* purple lightning crackling from the top-right */
-    radial-gradient(1250px 660px at 82% -12%, rgba(168, 85, 247, 0.34), transparent 62%),
+    radial-gradient(1250px 660px at 82% -12%, rgba(var(--accent-3-rgb), 0.34), transparent 62%),
     /* molten fire glow rising off the horizon, bottom-left */
-    radial-gradient(1150px 800px at 12% 118%, rgba(255, 106, 26, 0.38), transparent 58%),
+    radial-gradient(1150px 800px at 12% 118%, rgba(var(--accent-2-rgb), 0.38), transparent 58%),
     /* toxic-green haze seeping up from the bottom-right */
-    radial-gradient(950px 660px at 92% 112%, rgba(139, 255, 31, 0.28), transparent 58%);
+    radial-gradient(950px 660px at 92% 112%, rgba(var(--accent-rgb), 0.28), transparent 58%);
   animation: edge-pulse 2.5s ease-in-out infinite;
   will-change: opacity, transform;
 }
@@ -80,6 +81,11 @@ body::before {
   0%, 100% { opacity: 0.55; transform: scale(1); }
   50%      { opacity: 1;    transform: scale(1.06); }
 }
+
+/* Theme-specific extras hang off <html data-theme="…"> (set by js/themes/apply.js). The defaults
+   above are the toxic look; calmer themes switch off the breathing glow. A bespoke preset can add
+   its own [data-theme="<id>"] block here. */
+[data-theme="neutral"] body::before { animation: none; opacity: 0.45; }
 
 /* The gooey "toxic waste" lava-lamp layer (built + animated in js/lava-lamp.js). Fixed, full
    viewport, behind all content but in FRONT of the corner glows (z-index -1 vs -2). The canvas
@@ -104,7 +110,7 @@ body::before {
   width: 100%;
   height: 100%;
   /* url(#lava-goo) does the merge; drop-shadow makes the merged ooze emissive (glows to the mix). */
-  filter: url(#lava-goo) drop-shadow(0 0 var(--lava-glow) rgba(139, 255, 31, 0.5));
+  filter: url(#lava-goo) drop-shadow(0 0 var(--lava-glow) rgba(var(--accent-rgb), 0.5));
   opacity: 0.6;
 }
 
@@ -120,12 +126,12 @@ body::before {
   min-width: 0;
   background:
     /* lightning-purple wash bleeding in from the top-right, echoing the page's purple corner glow */
-    radial-gradient(130% 115% at 100% 0%, rgba(168, 85, 247, 0.28), transparent 58%),
-    linear-gradient(180deg, rgba(28, 40, 18, 0.72), rgba(16, 22, 12, 0.88));
+    radial-gradient(130% 115% at 100% 0%, rgba(var(--accent-3-rgb), 0.28), transparent 58%),
+    linear-gradient(180deg, rgba(var(--panel-top-rgb), 0.72), rgba(var(--panel-bottom-rgb), 0.88));
   border: 1px solid var(--line);
   border-radius: calc(var(--radius) + 6px);
   padding: clamp(8px, 2.5vw, 32px);
-  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(139, 255, 31, 0.10);
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(var(--accent-rgb), 0.10);
   backdrop-filter: blur(12px);
 }
 
@@ -171,8 +177,8 @@ stemplayer-js {
 /* Mobile volume slider styled like the component's wide-layout fader: a thin uniform track (no
    coloured progress fill) with a light vertical "pill" thumb, rather than the round-thumb style. */
 .stems--mobile .slider { height: 4px; background: var(--line); }
-.stems--mobile .slider::-webkit-slider-thumb { width: 11px; height: 22px; border-radius: 5px; background: #d8ffb0; border: none; }
-.stems--mobile .slider::-moz-range-thumb { width: 11px; height: 22px; border-radius: 5px; background: #d8ffb0; border: none; }
+.stems--mobile .slider::-webkit-slider-thumb { width: 11px; height: 22px; border-radius: 5px; background: var(--thumb); border: none; }
+.stems--mobile .slider::-moz-range-thumb { width: 11px; height: 22px; border-radius: 5px; background: var(--thumb); border: none; }
 
 /* Header */
 .player__header {
@@ -269,7 +275,7 @@ stemplayer-js {
   transition: color 0.2s, border-color 0.2s, background 0.2s;
 }
 .transport__loop svg { width: 18px; height: 18px; fill: currentColor; }
-.transport__loop.is-on { color: var(--accent); border-color: var(--accent); background: rgba(139, 255, 31, 0.12); }
+.transport__loop.is-on { color: var(--accent); border-color: var(--accent); background: rgba(var(--accent-rgb), 0.12); }
 
 /* Stems */
 .stems { display: flex; flex-direction: column; gap: 14px; margin-bottom: 24px; }
@@ -384,7 +390,7 @@ body { padding-top: 64px; }
   height: 52px;
   display: flex; align-items: center; gap: 14px;
   padding: 0 clamp(12px, 3vw, 20px);
-  background: rgba(13, 15, 26, 0.72);
+  background: rgba(var(--nav-bg-rgb), 0.72);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(10px);
 }
@@ -436,7 +442,7 @@ body { padding-top: 64px; }
 .nav-drawer__list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .nav-drawer__song:hover { background: var(--bg-elev); }
 .nav-drawer__song.is-current {
-  background: rgba(139, 255, 31, 0.14); color: var(--accent); font-weight: 600;
+  background: rgba(var(--accent-rgb), 0.14); color: var(--accent); font-weight: 600;
 }
 
 /* Landing */
@@ -457,7 +463,7 @@ body { padding-top: 64px; }
 .song-card {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
   text-decoration: none; color: var(--text);
-  background: linear-gradient(180deg, rgba(30, 36, 64, 0.7), rgba(22, 26, 44, 0.85));
+  background: linear-gradient(180deg, rgba(var(--card-top-rgb), 0.7), rgba(var(--card-bottom-rgb), 0.85));
   border: 1px solid var(--line); border-radius: var(--radius);
   padding: 16px 18px;
   transition: border-color 0.18s var(--ease), transform 0.18s var(--ease), box-shadow 0.2s var(--ease);
@@ -503,7 +509,7 @@ body { padding-top: 64px; }
 .install-banner__hint strong { color: var(--text); font-weight: 600; }
 .install-banner__action {
   appearance: none; cursor: pointer;
-  background: var(--accent); color: #07130a;
+  background: var(--accent); color: var(--on-accent);
   border: 0; border-radius: 999px;
   padding: 8px 16px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em;
 }
@@ -638,7 +644,7 @@ body { padding-top: 64px; }
   display: grid; place-items: center;
   transition: color 0.2s, border-color 0.2s, background 0.2s;
 }
-.mobile-bar__loop.is-on { color: var(--accent); border-color: var(--accent); background: rgba(139,255,31,0.12); }
+.mobile-bar__loop.is-on { color: var(--accent); border-color: var(--accent); background: rgba(var(--accent-rgb), 0.12); }
 .mobile-bar__loop svg { width: 18px; height: 18px; fill: currentColor; }
 
 /* Separate speed card: top-right, disconnected from the L-card */
