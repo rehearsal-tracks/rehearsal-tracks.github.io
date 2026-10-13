@@ -49,7 +49,9 @@ const SHELL_ASSETS = [
   "js/offline-ui.js",
   "js/prefetch.js",
   "js/stream.js",
+  "js/media-session.js",
   "js/sw-register.js",
+  "silence.mp3",
   "js/lib/catalog-view.js",
   "icons/apple-touch-icon.png",
   "icons/icon-192.png",
@@ -112,7 +114,13 @@ self.addEventListener("fetch", (event) => {
   }
 
   // 2. Same-origin shell assets (CSS/JS/icons/svg/manifest): stale-while-revalidate — instant from
-  //    cache, refreshed in the background so the next load has the latest.
+  //    cache, refreshed in the background so the next load has the latest. Byte-range requests come
+  //    from <audio> (the silence.mp3 keep-alive); Safari won't play a 200 sent in reply to one, so
+  //    those get a 206 sliced from the cached copy.
+  if (isSameOrigin && request.headers.has("range")) {
+    event.respondWith(rangeFromCache(request, SHELL_CACHE));
+    return;
+  }
   if (isSameOrigin) {
     event.respondWith(staleWhileRevalidate(request, SHELL_CACHE));
     return;
@@ -182,6 +190,29 @@ async function cacheFirst(request, cacheName) {
   // esm.sh/fonts can return opaque (no-cors) responses; still cacheable, just not introspectable.
   if (res && (res.ok || res.type === "opaque")) cache.put(request, res.clone());
   return res;
+}
+
+async function rangeFromCache(request, cacheName) {
+  const cached = await (await caches.open(cacheName)).match(request.url);
+  const m = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get("range").trim());
+  if (!cached || !m || (m[1] === "" && m[2] === "")) return fetch(request); // network handles ranges
+  const buf = await cached.arrayBuffer();
+  const size = buf.byteLength;
+  let start, end;
+  if (m[1] === "") { start = Math.max(0, size - Number(m[2])); end = size - 1; } // suffix: last N bytes
+  else { start = Number(m[1]); end = m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1); }
+  if (start >= size || start > end) {
+    return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${size}` } });
+  }
+  return new Response(buf.slice(start, end + 1), {
+    status: 206,
+    headers: {
+      "Content-Type": cached.headers.get("Content-Type") || "application/octet-stream",
+      "Content-Range": `bytes ${start}-${end}/${size}`,
+      "Content-Length": String(end - start + 1),
+      "Accept-Ranges": "bytes",
+    },
+  });
 }
 
 async function cacheOnlyElseNetwork(request) {

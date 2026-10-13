@@ -7,6 +7,7 @@ import {
   WAVE_COLOR, WAVE_PROGRESS_COLOR, buildMobileStemRow, themeWaveform, observeLayout,
 } from "./player-ui.js";
 import { createStretchEngine } from "./stretch/core.js";
+import { enableBackgroundAudioSession, initMediaSession } from "./media-session.js";
 
 const params = new URLSearchParams(location.search);
 const songId = params.get("song");
@@ -30,6 +31,9 @@ async function main() {
 
   document.getElementById("title").textContent = manifest.title;
   document.getElementById("artist").textContent = manifest.artist;
+
+  // Must run before stemplayer-js (or the stretch core) creates its AudioContext.
+  enableBackgroundAudioSession();
 
   const player = document.createElement("stemplayer-js");
 
@@ -97,6 +101,39 @@ async function main() {
 
   const stemEls = [...player.querySelectorAll("stemplayer-js-stem")];
 
+  // Background playback + lock-screen / media-key controls (see media-session.js).
+  const session = initMediaSession({
+    title: manifest.title,
+    artist: manifest.artist,
+    onPlay() {
+      controls.dispatchEvent(new Event("controls:play", { bubbles: true }));
+    },
+    onPause() {
+      controls.dispatchEvent(new Event("controls:pause", { bubbles: true }));
+    },
+    onSeek(time) {
+      const dur = controls.duration ?? (stretchActive ? engine?.duration : 0) ?? 0;
+      if (dur <= 0) return;
+      if (stretchActive) {
+        engine.seek(time).then(() => {
+          applyPlayhead(engine.currentTime, engine.duration ? engine.currentTime / engine.duration : 0);
+          session.updatePosition(engine.currentTime, true);
+        });
+      } else {
+        controls.dispatchEvent(new CustomEvent("controls:seek", { bubbles: true, detail: time / dur }));
+      }
+    },
+    getDuration() {
+      return controls.duration ?? (stretchActive ? engine?.duration : 0) ?? 0;
+    },
+    getCurrentTime() {
+      return stretchActive ? engine.currentTime : (controls.currentTime ?? 0);
+    },
+    getPlaybackRate() {
+      return stretchActive ? engine.rate : 1;
+    },
+  });
+
   const pushGains = () => {
     if (!engine) return;
     const soloActive = stemEls.some((el) => el.solo === "on");
@@ -126,9 +163,23 @@ async function main() {
   // `audioContext.audioWorklet` is undefined until the context is actually "running",
   // which on iOS requires resume() inside a real gesture (not a synthetic event).
   const unlockAudio = () => {
-    if (!ac) ac = new AudioContext({ latencyHint: "playback" });
+    if (!ac) {
+      ac = new AudioContext({ latencyHint: "playback" });
+      // iOS can put the context in "interrupted" (call, Siri, another app — and on some versions
+      // screen lock). A genuine interruption also pauses the keep-alive <audio>, which pauses the
+      // player via media-session.js; anything else we try to ride through by resuming.
+      ac.addEventListener("statechange", () => {
+        if (ac.state === "interrupted" && engine?.playing) ac.resume().catch(() => {});
+      });
+    }
     ac.resume().catch(() => {});
   };
+  // resume() can be refused while an interruption lasts — retry when the user comes back.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && ac?.state === "interrupted" && engine?.playing) {
+      ac.resume().catch(() => {});
+    }
+  });
 
   // Warm the audio context on the first genuine gesture anywhere on the page.
   // We do NOT pre-load the stretch core here — only unlock the context so it's
@@ -214,6 +265,15 @@ async function main() {
   }
   player.addEventListener("loading-end", restoreSolo);
 
+  // Mirror the HLS engine's REAL state into the media session — not just our transport events,
+  // since the component's Space-bar shortcut and natural end of playback bypass controls:*.
+  player.addEventListener("start", () => { if (!stretchActive) session.notifyPlay(); });
+  player.addEventListener("pause", () => { if (!stretchActive) session.notifyPause(); });
+  player.addEventListener("end", () => { if (!stretchActive) session.notifyPause(); });
+  player.addEventListener("seek", (e) => {
+    if (!stretchActive && typeof e.detail?.t === "number") session.updatePosition(e.detail.t, true);
+  });
+
   // ── Playhead state + transport interception for stretch mode ─────────────────────────────────
   let scrubbing = false;    // pointer held on the transport (a seek drag may be in progress)
   let seekSettling = false; // a seek was requested and not yet reflected in the core
@@ -229,14 +289,30 @@ async function main() {
   // handler; stopPropagation prevents the HLS engine from ever playing again after the swap.
   // While stretchActive=false these return early, letting the component handle events normally.
   player.addEventListener("controls:play", (e) => {
+    session.notifyPlay(); // inside the user's gesture, so iOS lets the keep-alive <audio> start
     if (!stretchActive) return;
     e.stopPropagation();
+    // The core only resumes a "suspended" context; after an iOS interruption it's "interrupted".
+    if (ac.state !== "running") ac.resume().catch(() => {});
     engine.play().catch(() => {});
   }, true);
   player.addEventListener("controls:pause", (e) => {
+    session.notifyPause();
     if (!stretchActive) return;
     e.stopPropagation();
     if (engine) engine.pause();
+  }, true);
+
+  // stemplayer-js toggles its own HLS engine on Space from a window keydown listener, which would
+  // start the HLS stems underneath the stretch core. In stretch mode, catch Space first (window
+  // capture) and route it through our transport instead. Same form-control exemptions as the component.
+  window.addEventListener("keydown", (e) => {
+    if (!stretchActive || e.code !== "Space") return;
+    const tag = e.composedPath()[0]?.tagName?.toUpperCase();
+    if (["INPUT", "TEXTAREA", "BUTTON"].includes(tag)) return;
+    e.stopPropagation();
+    e.preventDefault();
+    controls.dispatchEvent(new Event(engine.playing ? "controls:pause" : "controls:play", { bubbles: true }));
   }, true);
 
   // Scrub guard: a pointer held anywhere on the transport may mean the user is dragging the
@@ -290,9 +366,12 @@ async function main() {
     }
 
     // Wire core events → UI feedback.
-    engine.on("time", ({ time, pct }) => setPlayhead(time, pct));
-    engine.on("state", ({ playing }) => { controls.isPlaying = playing; });
-    engine.on("end", () => { controls.isPlaying = false; });
+    engine.on("time", ({ time, pct }) => { setPlayhead(time, pct); session.updatePosition(time); });
+    engine.on("state", ({ playing }) => {
+      controls.isPlaying = playing;
+      if (playing) session.notifyPlay(); else session.notifyPause();
+    });
+    engine.on("end", () => { controls.isPlaying = false; session.notifyPause(); });
     engine.on("error", (err) => console.warn("[stretch] segment feed error", err));
 
     // Seek to the captured position, then play if the user was already playing.
@@ -374,8 +453,10 @@ async function main() {
     mobRateVal.textContent = label;
     rateInput.value = String(val);
     mobRateInput.value = String(val);
-    if (stretchActive) engine.setRate(val);
-    else if (val < 1) triggerSwap();
+    if (stretchActive) {
+      engine.setRate(val);
+      session.updatePosition(undefined, true); // lock-screen progress runs at the new rate
+    } else if (val < 1) triggerSwap();
   };
   applyRate(1);   // initial paint
 
@@ -429,6 +510,7 @@ async function main() {
     if (dur > 0) mobDurEl.textContent = formatTime(dur);
     mobPlayBtn.classList.toggle("is-playing", !!controls.isPlaying);
     mobLoopBtn.classList.toggle("is-on", !!controls.loop);
+    if (!stretchActive && controls.isPlaying) session.updatePosition(t);
     requestAnimationFrame(tickMobileBar);
   }());
 

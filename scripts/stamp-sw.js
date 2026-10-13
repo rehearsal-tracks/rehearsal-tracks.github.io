@@ -36,6 +36,7 @@ export async function stampSw() {
     join(ROOT, "icons/icon-192.png"),
     join(ROOT, "icons/icon-512.png"),
     join(ROOT, "icons/icon-maskable-512.png"),
+    join(ROOT, "silence.mp3"),
   ].sort();
 
   const hash = createHash("sha256");
