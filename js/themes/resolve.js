@@ -16,7 +16,7 @@ export function resolveTheme({ preset, overrides } = {}, { warn = console.warn }
     base = PRESETS[FALLBACK_PRESET];
   }
 
-  const tokens = { ...base.tokens };
+  const tokens = Object.fromEntries(Object.entries(base.tokens).map(([k, v]) => [k, v.toLowerCase()]));
   for (const [key, value] of Object.entries(overrides || {})) {
     if (!Object.hasOwn(TOKENS, key)) { warn(`[theme] ignoring unknown token "${key}"`); continue; }
     if (!isHex(value)) { warn(`[theme] ignoring invalid colour for "${key}": ${value}`); continue; }
@@ -25,7 +25,7 @@ export function resolveTheme({ preset, overrides } = {}, { warn = console.warn }
 
   const vars = {};
   for (const [key, cssVar] of Object.entries(TOKENS)) {
-    vars[cssVar] = tokens[key].toLowerCase();
+    vars[cssVar] = tokens[key];
     vars[`${cssVar}-rgb`] = hexToRgb(tokens[key]).join(", ");
   }
 
