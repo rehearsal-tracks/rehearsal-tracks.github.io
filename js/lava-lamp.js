@@ -10,14 +10,19 @@
 // with the overall level, and the sway SHIMMERS on the treble. With no audio (the landing page, or
 // before play) it falls back to a gentle idle drift so the page still looks alive. Honours
 // prefers-reduced-motion by drawing a single static frame.
+//
+// Not auto-started: it is a theme background. js/themes/apply.js imports it and calls mount(theme)
+// when the active preset uses it; the colour ramp comes from the theme's accent2 → accent tokens.
+import { hexToRgb } from "./themes/color.js";
 
 // ── Audio tap ─────────────────────────────────────────────────────────────────────────────────
 // We don't reach into stemplayer-js's audio graph — instead we patch AudioNode.connect once so that
 // whenever ANY node connects to a context's final destination (the speakers), we ALSO feed it into a
 // shared AnalyserNode. An analyser is a passive sink: it reads the signal without altering the path
 // to the output, so this captures the full mix no matter how the component wires itself, and the
-// tap is wrapped in try/catch so a visual can never break playback. The patch is installed on module
-// load — well before the first user-gesture play that lazily creates the AudioContext.
+// tap is wrapped in try/catch so a visual can never break playback. The patch is installed by mount(),
+// which the theme calls at the start of each page's main() — well before the first user-gesture
+// play that lazily creates the AudioContext.
 let analyser = null;
 let freqData = null;
 
@@ -44,8 +49,9 @@ function installAudioTap() {
 }
 
 // ── Blob field ──────────────────────────────────────────────────────────────────────────────────
-const HOT = [255, 106, 26];   // molten orange — the heat source at the bottom
-const COOL = [139, 255, 31];  // toxic lime — cooled ooze up top
+// Colour ramp, set from the theme in mount(): hot (accent2) at the bottom → cool (accent) at the top.
+let HOT = [255, 106, 26];
+let COOL = [139, 255, 31];
 
 let layer, canvas, ctx;
 let W = 0, H = 0, DPR = 1;
@@ -208,7 +214,17 @@ function start() {
   requestAnimationFrame(loop);
 }
 
-export function initLavaLamp() {
+let mounted = false;
+
+// Entry point used by js/themes/apply.js when the active preset has this background.
+// theme = resolveTheme() output. Idempotent: a page mounts at most one lamp.
+export function mount(theme) {
+  if (theme?.tokens) {
+    HOT = hexToRgb(theme.tokens.accent2);
+    COOL = hexToRgb(theme.tokens.accent);
+  }
+  if (mounted) return;
+  mounted = true;
   installAudioTap();  // patch ASAP so it's in place before the first play creates the AudioContext
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", start, { once: true });
@@ -216,5 +232,3 @@ export function initLavaLamp() {
     start();
   }
 }
-
-initLavaLamp();

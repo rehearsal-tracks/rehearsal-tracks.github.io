@@ -4,10 +4,12 @@ import { initNav } from "./nav.js";
 import { initPrefetch } from "./prefetch.js";
 import { mountOfflineControl } from "./offline-ui.js";
 import {
-  WAVE_COLOR, WAVE_PROGRESS_COLOR, buildMobileStemRow, themeWaveform, observeLayout,
+  wavePalette, buildMobileStemRow, themeWaveform, observeLayout,
 } from "./player-ui.js";
 import { createStretchEngine } from "./stretch/core.js";
 import { enableBackgroundAudioSession, initMediaSession } from "./media-session.js";
+import { resolveTheme, previewPresetFromQuery } from "./themes/resolve.js";
+import { applyTheme } from "./themes/apply.js";
 
 const params = new URLSearchParams(location.search);
 const songId = params.get("song");
@@ -17,6 +19,8 @@ const playerEl = document.getElementById("player");
 function showError(msg) { statusEl.textContent = msg; statusEl.hidden = false; }
 
 async function main() {
+  // Phase 1: every page is Toxic Avenger. Phase 3 replaces this with the project's theme.
+  applyTheme(resolveTheme({ preset: previewPresetFromQuery(location.search) || "toxic" }));
   initNav({ currentSongId: songId });
   if (!songId) return showError("No ?song=<id> specified.");
   const base = `${R2_BASE}/songs/${songId}`;
@@ -82,8 +86,8 @@ async function main() {
     // themeWaveform() below, because stemplayer-js 4.1.0-beta.4 reflects these to stem properties but
     // does NOT forward them to the child that actually paints — so without (2) the waveforms fall back
     // to the component defaults (grey bars + cyan progress, which clashes with the theme).
-    el.setAttribute("wavecolor", WAVE_COLOR);
-    el.setAttribute("waveprogresscolor", WAVE_PROGRESS_COLOR);
+    el.setAttribute("wavecolor", wavePalette().wave);
+    el.setAttribute("waveprogresscolor", wavePalette().progress);
     themeWaveform(el);
     const s = savedMix[stem.src] || {};
     const vol = typeof s.volume === "number" ? s.volume : 1;
