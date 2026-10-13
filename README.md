@@ -10,6 +10,7 @@ else's.
 - 🌊 Streams from Cloudflare R2 (HLS MP3 segments) over HTTP/2 — handles 10+ stems × ~10 min without loading whole files into memory
 - 📲 Installable PWA — add to home screen, then **download songs for fully offline playback**
 - 📱 Works in Safari/Chrome/Firefox on phone, tablet, desktop — no app, no account
+- 🔐 Keeps playing in the background / with the screen locked on iOS & Android, with lock-screen and media-key controls
 - 🪶 Static front-end, no build step, no server
 
 ---
@@ -203,6 +204,31 @@ the same link hear whatever *they* set — the link is shared, the mix is not.
 
 ---
 
+## Background playback & lock-screen controls
+
+All music is Web Audio, which phones normally suspend when the app is backgrounded
+or the screen locks. `js/media-session.js` keeps it alive with three pieces:
+
+- **Audio Session API** (iOS/iPadOS 17+): `navigator.audioSession.type = "playback"`,
+  set before any `AudioContext` exists. Also plays through the silent switch. Other
+  browsers don't have it, so it's a no-op on desktop/Android.
+- **Silent keep-alive** (`silence.mp3`, 10 s, looped in a hidden `<audio>`): makes the
+  page a real media session. Android only shows its media notification for media
+  **≥ 5 s**, so keep the file long. The OS pauses media elements on interruptions
+  (call, another app's audio, headphones unplugged) but not Web Audio — so a pause we
+  didn't request pauses the player too.
+- **Media Session API**: title/artist/artwork plus play/pause/stop/seek handlers for
+  the lock screen, notification shade, and desktop media keys. State is driven by the
+  engines' real `start`/`pause`/`end` events (not just button clicks), so Space-bar
+  and end-of-song stay in sync; position is reported at the current slow-down rate.
+
+Gotchas: `*.wav` is gitignored (hence MP3). `<audio>` fetches with `Range` headers and
+Safari won't play a cached `200` in reply, so `sw.js` slices a `206` from the cache
+(`rangeFromCache`). Verify changes here on a real iPhone (Safari **and** home-screen
+app) and Android Chrome — lock the screen, switch apps, and trigger a call/Siri.
+
+---
+
 ## Project layout
 
 | Path | What |
@@ -211,6 +237,7 @@ the same link hear whatever *they* set — the link is shared, the mix is not.
 | `stream.html`, `js/stream.js` | Player page (one song via `stemplayer-js`) |
 | `js/nav.js`, `js/data.js`, `js/config.js`, `js/lib/` | Shared nav drawer, R2 fetches, R2 base URL, pure view helpers |
 | `js/prefetch.js` | Anticipatory segment prefetch (warms the HTTP cache ahead of the playhead) |
+| `js/media-session.js`, `silence.mp3` | Background playback + lock-screen / media-key controls |
 | `sw.js`, `js/sw-register.js`, `manifest.webmanifest`, `icons/` | PWA: installable app shell + auto-update flow |
 | `js/offline.js`, `js/offline-ui.js` | Offline downloads — per-song Cache Storage + storage UI |
 | `css/styles.css` | Dark design system (shared by both pages) |
