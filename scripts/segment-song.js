@@ -3,8 +3,8 @@
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { segmentSong } from "./lib/segment.js";
-import { refreshCatalog } from "./lib/catalog.js";
-import { uploadDir, listSongIds, readRemoteManifest, uploadJson } from "./lib/upload.js";
+import { uploadDir } from "./lib/upload.js";
+import { refreshRemoteCatalog, describeRefresh } from "./lib/remote-catalog.js";
 
 function parseArgs(argv) {
   const args = { _: [], bitrate: "128k", bucket: "stem-player", upload: true };
@@ -42,13 +42,8 @@ async function main() {
     console.log("→ uploading to R2…");
     const dest = await uploadDir(outRoot, args.bucket, `songs/${args.id}`);
     console.log(`✔ uploaded to ${dest}`);
-    console.log("→ refreshing catalog…");
-    const catalog = await refreshCatalog({
-      listSongIds: () => listSongIds(args.bucket),
-      readManifest: (id) => readRemoteManifest(args.bucket, id),
-      writeCatalog: (c) => uploadJson(c, args.bucket, "catalog.json"),
-    });
-    console.log(`✔ catalog.json updated (${catalog.songs.length} songs)`);
+    console.log("→ refreshing catalogs…");
+    console.log(`✔ ${describeRefresh(await refreshRemoteCatalog(args.bucket))}`);
   } else {
     console.log("• skipped upload (--no-upload)");
   }

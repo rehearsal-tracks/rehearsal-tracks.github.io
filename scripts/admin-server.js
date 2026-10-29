@@ -6,8 +6,8 @@ import { join, dirname, extname, normalize } from "node:path";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { listSongIds, readRemoteManifest, uploadJson, uploadDir, deleteRemoteSong, deleteRemoteStem, updateRemoteManifest } from "./lib/upload.js";
-import { refreshCatalog } from "./lib/catalog.js";
+import { readRemoteManifest, uploadDir, deleteRemoteSong, deleteRemoteStem, updateRemoteManifest } from "./lib/upload.js";
+import { refreshRemoteCatalog } from "./lib/remote-catalog.js";
 import { safeId, safeFilename } from "./lib/safe-path.js";
 import { reorderStems, editMeta, addStem, renameStem, removeStem } from "./lib/manifest-ops.js";
 
@@ -59,13 +59,7 @@ async function sweepTempDirs() {
   } catch { /* TMP_ROOT may not exist yet — fine */ }
 }
 
-async function refresh() {
-  return refreshCatalog({
-    listSongIds: () => listSongIds(BUCKET),
-    readManifest: (id) => readRemoteManifest(BUCKET, id),
-    writeCatalog: (c) => uploadJson(c, BUCKET, "catalog.json"),
-  });
-}
+const refresh = () => refreshRemoteCatalog(BUCKET);
 
 async function route(req, res, pathname) {
   const parts = pathname.split("/").filter(Boolean); // ["api", ...]
@@ -121,7 +115,7 @@ async function route(req, res, pathname) {
       await segmentSong({ inputDir, id: safeSong, title, artist, bitrate, outRoot });
       await uploadDir(outRoot, BUCKET, `songs/${safeSong}`);
       const catalog = await refresh();
-      return send(res, 201, { ok: true, id: safeSong, songCount: catalog.songs.length });
+      return send(res, 201, { ok: true, id: safeSong, songCount: catalog.songCount });
     } finally {
       await rm(inputDir, { recursive: true, force: true });
       await rm(outRoot, { recursive: true, force: true });
@@ -137,7 +131,7 @@ async function route(req, res, pathname) {
     if (Array.isArray(stemOrder)) manifest = reorderStems(manifest, stemOrder.map(safeId));
     await updateRemoteManifest(BUCKET, id, manifest);
     const catalog = await refresh();
-    return send(res, 200, { ok: true, songCount: catalog.songs.length });
+    return send(res, 200, { ok: true, songCount: catalog.songCount });
   }
 
   // DELETE /api/songs/:id
@@ -145,7 +139,7 @@ async function route(req, res, pathname) {
     const id = safeId(parts[2]);
     await deleteRemoteSong(BUCKET, id);   // purge whole tree
     const catalog = await refresh();      // catalog drops it (rebuilt from remaining manifests)
-    return send(res, 200, { ok: true, songCount: catalog.songs.length });
+    return send(res, 200, { ok: true, songCount: catalog.songCount });
   }
 
   // POST /api/songs/:id/stems  { uploadId, filename, name }
