@@ -3,6 +3,8 @@ import { fetchCatalog } from "./data.js";
 import { songCardModel } from "./lib/catalog-view.js";
 import { initNav } from "./nav.js";
 import { mountDownloadsSection } from "./offline-ui.js";
+import { resolveTheme, previewPresetFromQuery } from "./themes/resolve.js";
+import { applyTheme } from "./themes/apply.js";
 
 const listEl = document.getElementById("song-list");
 const downloadsEl = document.getElementById("downloads");
@@ -36,6 +38,8 @@ function renderSongs(songs) {
 }
 
 async function main() {
+  // Phase 1: every page is Toxic Avenger. Phase 3 replaces this with the project's theme.
+  applyTheme(resolveTheme({ preset: previewPresetFromQuery(location.search) || "toxic" }));
   initNav();
   setState(`<p class="list-note">Loading songs…</p>`);
   try {

@@ -3,10 +3,11 @@
 // audio-agnostic (they only read/write the component's public props), so both the native HLS
 // controller and the headless stretch core can sit behind them.
 
-// Toxic Avenger waveform palette: murky-moss unplayed bars, toxic-green played portion (reads as
-// progress). Kept in sync with --accent in css/styles.css.
-export const WAVE_COLOR = "#4f6b2e";
-export const WAVE_PROGRESS_COLOR = "#8bff1f";
+// Waveform palette, set by the active theme (js/themes/apply.js → setWavePalette). Defaults are the
+// toxic preset's wave / waveProgress tokens so the player is correct even if no theme was applied.
+let palette = { wave: "#4f6b2e", progress: "#8bff1f" };
+export function setWavePalette({ wave, progress }) { palette = { wave, progress }; }
+export function wavePalette() { return palette; }
 
 // Find the first matching element anywhere in a shadow-DOM subtree, crossing shadow boundaries.
 export function deepQuery(root, selector) {
@@ -33,8 +34,8 @@ export function themeWaveform(stem) {
   const iv = setInterval(() => {
     const fcw = stem.shadowRoot && deepQuery(stem.shadowRoot, "fc-waveform");
     if (fcw) {
-      fcw.setAttribute("wavecolor", WAVE_COLOR);
-      fcw.setAttribute("progresscolor", WAVE_PROGRESS_COLOR);
+      fcw.setAttribute("wavecolor", palette.wave);
+      fcw.setAttribute("progresscolor", palette.progress);
     }
     if (fcw || ++tries > 60) clearInterval(iv);
   }, 50);
