@@ -556,6 +556,8 @@ body { padding-top: 64px; }
 
 /* ── Downloads / storage section (js/offline-ui.js, landing page) ─────────────────────────────── */
 .downloads { margin-top: 28px; }
+.downloads__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; }
+.downloads__confirm { font-size: 14px; color: var(--text); flex: 1 1 100%; }
 .downloads__heading {
   font-family: var(--font-display); font-weight: 400; font-size: 18px;
   letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-dim);
