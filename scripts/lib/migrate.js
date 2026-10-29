@@ -28,7 +28,8 @@ export function planMigration({ existingProject, manifests }) {
   return { createProject, stamp, foreign };
 }
 
+// Drops any falsy `project` already present (planMigration stamps those too) so it can't override the stamp.
 export function stampProject(manifest, pid) {
-  const { schemaVersion, id, ...rest } = manifest;
+  const { schemaVersion, id, project: _unassigned, ...rest } = manifest;
   return { schemaVersion, id, project: pid, ...rest };
 }

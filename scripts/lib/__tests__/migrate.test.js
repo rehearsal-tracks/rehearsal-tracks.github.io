@@ -50,3 +50,9 @@ test("stampProject inserts project after id and does not mutate", () => {
   assert.equal(m.project, undefined);
   assert.deepEqual({ ...s, project: undefined }, { ...m, project: undefined });
 });
+
+test("stampProject overrides a falsy project already present", () => {
+  for (const project of ["", null]) {
+    assert.equal(stampProject({ schemaVersion: 1, id: "a", project, title: "A" }, "toxic-avenger").project, "toxic-avenger");
+  }
+});

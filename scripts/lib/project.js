@@ -31,6 +31,6 @@ export function normalizeProject(raw, pid) {
 export function assertSongOwnership(existingManifest, pid) {
   const owner = existingManifest?.project;
   if (owner && owner !== pid) {
-    throw new Error(`song "${existingManifest.id}" already belongs to project "${owner}". Pick a different --id`);
+    throw new Error(`song "${existingManifest.id}" already belongs to project "${owner}". Pick a different id`);
   }
 }

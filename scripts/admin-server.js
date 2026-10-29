@@ -110,14 +110,12 @@ async function route(req, res, pathname) {
     const safeUp = safeId(uploadId), safeSong = safeId(id);
     if (!title || !artist) return sendError(res, 400, "title and artist are required");
     const inputDir = join(TMP_ROOT, safeUp);
-    try {
-      assertSongOwnership(await readRemoteJsonIfExists(BUCKET, `songs/${safeSong}/manifest.json`), LEGACY_PROJECT_ID);
-    } catch (e) {
-      await rm(inputDir, { recursive: true, force: true });
-      return sendError(res, 409, e.message);
-    }
     const outRoot = join(__dirname, "..", "dist", "songs", safeSong);
     try {
+      // Same id-uniqueness rule as the CLI. A failed read is a 500 (outer handler), not a conflict.
+      const existing = await readRemoteJsonIfExists(BUCKET, `songs/${safeSong}/manifest.json`);
+      try { assertSongOwnership(existing, LEGACY_PROJECT_ID); }
+      catch (e) { return sendError(res, 409, e.message); }
       const { segmentSong } = await import("./lib/segment.js");
       // Phase 2: every admin-added song joins toxic-avenger. Phase 4 adds a project selector.
       await segmentSong({ inputDir, id: safeSong, project: LEGACY_PROJECT_ID, title, artist, bitrate, outRoot });
