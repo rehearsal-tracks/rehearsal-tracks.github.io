@@ -92,6 +92,46 @@ export async function readRemoteManifest(bucket, id) {
   return JSON.parse(stdout);
 }
 
+// rclone reports a missing path as an error mentioning "not found" / "doesn't exist" (wording
+// varies by command and backend).
+export function isNotFound(e) {
+  const msg = `${e.stderr || ""}${e.message || ""}`.toLowerCase();
+  return msg.includes("not found") || msg.includes("doesn't exist") || msg.includes("no such");
+}
+
+// Reads a remote JSON object, or null when it doesn't exist. Other failures still throw. Empty
+// output is also treated as absent: rclone isn't guaranteed to error on a missing key.
+export async function readRemoteJsonIfExists(bucket, path) {
+  try {
+    const { stdout } = await pexec("rclone", ["cat", `r2:${bucket}/${path}`]);
+    return stdout.trim() ? JSON.parse(stdout) : null;
+  } catch (e) {
+    if (isNotFound(e)) return null;
+    throw e;
+  }
+}
+
+// Lists project ids under projects/ (directory names). Before the migration there's no projects/
+// prefix at all, which is [] rather than an error.
+export async function listProjectIds(bucket) {
+  try {
+    const { stdout } = await pexec("rclone", ["lsf", "--dirs-only", `r2:${bucket}/projects/`]);
+    return stdout.split("\n").map((l) => l.replace(/\/$/, "").trim()).filter(Boolean);
+  } catch (e) {
+    if (isNotFound(e)) return [];
+    throw e;
+  }
+}
+
+// Reads projects/<pid>/project.json, or null if absent (refreshCatalog warns and skips that folder).
+export function readRemoteProject(bucket, pid) {
+  return readRemoteJsonIfExists(bucket, `projects/${pid}/project.json`);
+}
+
+export async function writeRemoteProject(bucket, pid, project) {
+  await uploadJson(project, bucket, `projects/${pid}/project.json`);
+}
+
 // Uploads an in-memory object as pretty JSON to a remote path (e.g. catalog.json at root).
 export async function uploadJson(obj, bucket, remotePath) {
   const tmp = await mkdtemp(join(tmpdir(), "r2-json-"));
