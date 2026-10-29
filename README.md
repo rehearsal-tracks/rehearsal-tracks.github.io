@@ -102,6 +102,15 @@ for dir in "$ALBUM"/*/; do
 done
 ```
 
+### Start a new project (show)
+
+```bash
+npm run create-project -- --id=my-show --name="My Show" --credit="For the cast of My Show" --listed
+npm run create-project -- --id=my-show --name="My Show" --credit="For the cast of My Show" --listed --apply
+```
+
+The first command is a dry run that prints the `project.json`; `--apply` writes it to R2 and refreshes the catalogs. `--listed` shows it in the public project picker; leave it off to share it by link only (`index.html?project=my-show`). Optional theme: `--preset=toxic|neutral` and `--overrides='{"accent":"#ff3366"}'` (colour tokens from `js/themes/tokens.js`). Then upload songs with `--project=my-show`.
+
 ### Rebuild the catalog only
 
 If songs are already on R2 and you just need to regenerate the catalogs (`projects/<pid>/catalog.json`, `projects.json`, legacy `catalog.json`)
@@ -243,6 +252,7 @@ app) and Android Chrome — lock the screen, switch apps, and trigger a call/Sir
 | `css/styles.css` | Dark design system (shared by both pages) |
 | `scripts/segment-song.js` | CLI: encode + upload one song; refresh catalog |
 | `scripts/refresh-catalog.js` | Rebuild `catalog.json` from R2 |
+| `scripts/create-project.js` | CLI: create a new project (show) `project.json` (dry-run; `-- --apply`) |
 | `scripts/prune-media.js` | Delete orphaned old-rev media from R2 (dry-run; `-- --apply`) |
 | `scripts/deploy.js`, `scripts/stamp-sw.js` | Deploy: stamp `sw.js` version → commit → push |
 | `scripts/admin-server.js`, `scripts/admin/public/` | Local admin web UI (`npm run admin`) |

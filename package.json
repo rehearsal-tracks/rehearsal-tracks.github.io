@@ -8,6 +8,7 @@
     "segment": "node scripts/segment-song.js",
     "admin": "node scripts/admin-server.js",
     "migrate-projects": "node scripts/migrate-projects.js",
+    "create-project": "node scripts/create-project.js",
     "set-cache-headers": "node scripts/set-cache-headers.js",
     "prune-media": "node scripts/prune-media.js",
     "stamp-sw": "node scripts/stamp-sw.js",

@@ -5,7 +5,7 @@
 //   • Precache the app shell (HTML/CSS/JS/icons/manifest) so the app boots instantly and offline.
 //   • Cache the stemplayer-js component (esm.sh) + fonts at runtime so an installed app isn't
 //     broken by a CDN hiccup and can cold-start offline.
-//   • Serve the mutable JSON indices (catalog.json / manifest.json) network-first with an offline
+//   • Serve the mutable JSON indices (catalog.json, projects.json, manifest.json) network-first with an offline
 //     fallback to the last-seen copy.
 //   • Media (R2 seg_*.mp3 / waveform.json / audio.m3u8) is served from Cache Storage IF present,
 //     otherwise passed through to the network WITHOUT caching. Phase A never auto-fills whole songs
@@ -51,8 +51,13 @@ const SHELL_ASSETS = [
   "js/stream.js",
   "js/media-session.js",
   "js/sw-register.js",
+  "js/theme-boot.js",
   "silence.mp3",
   "js/lib/catalog-view.js",
+  "js/lib/safe-id.js",
+  "js/lib/project-state.js",
+  "js/lib/landing-route.js",
+  "js/lib/project-downloads.js",
   "js/player-ui.js",
   "js/stretch/core.js",
   "js/vendor/SignalsmithStretch.mjs",
@@ -98,6 +103,25 @@ self.addEventListener("message", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const names = await caches.keys();
+    // Carry the last-seen R2 JSON (projects.json, project catalogs, manifests) into the new runtime
+    // cache before pruning: a cast member who updated online and then cold-starts offline (say, at
+    // the theatre) still gets their project page, drawer and downloads list.
+    // Best-effort and per entry: a failed copy (e.g. a full device) must never skip the prune or
+    // clients.claim() below.
+    try {
+      const runtime = await caches.open(RUNTIME_CACHE);
+      for (const name of names.filter((n) => n.startsWith("rt-runtime-") && n !== RUNTIME_CACHE)) {
+        const old = await caches.open(name);
+        const reqs = (await old.keys()).filter((r) => r.url.startsWith(R2_ORIGIN) && r.url.endsWith(".json"));
+        await Promise.all(reqs.map(async (req) => {
+          try {
+            if (await runtime.match(req)) return;
+            const res = await old.match(req);
+            if (res) await runtime.put(req, res);
+          } catch (e) { console.warn("[sw] couldn't carry", req.url, e); }
+        }));
+      }
+    } catch (e) { console.warn("[sw] carry-forward failed:", e); }
     await Promise.all(
       names
         .filter((n) => !CACHE_ALLOWLIST.has(n) && !n.startsWith(SONG_CACHE_PREFIX))
@@ -118,7 +142,7 @@ self.addEventListener("fetch", (event) => {
   // 1. Navigations (loading index.html / stream.html): network-first so a new deploy is picked up,
   //    with an offline fallback to the cached page (or the root shell).
   if (request.mode === "navigate") {
-    event.respondWith(networkFirst(request, SHELL_CACHE, "./"));
+    event.respondWith(networkFirstNavigation(request));
     return;
   }
 
@@ -145,10 +169,11 @@ self.addEventListener("fetch", (event) => {
 
   // 4. R2 assets.
   if (url.origin === R2_ORIGIN) {
-    // Mutable indices → network-first, fall back to the last-seen copy offline. searchAllCaches so
+    // Mutable indices (catalog.json — root + projects/<pid>/ — manifest.json, projects.json) → network-first, fall back to the last-seen copy offline. searchAllCaches so
     // a downloaded song's manifest.json (stored in its rt-song-<id> cache) still resolves offline
     // even after a deploy has rolled the runtime cache.
-    if (url.pathname.endsWith("catalog.json") || url.pathname.endsWith("manifest.json")) {
+    if (url.pathname.endsWith("catalog.json") || url.pathname.endsWith("manifest.json") ||
+        url.pathname === "/projects.json") {
       event.respondWith(networkFirst(request, RUNTIME_CACHE, null, true));
       return;
     }
@@ -174,6 +199,24 @@ async function networkFirst(request, cacheName, fallbackKey, searchAllCaches = f
       (await cache.match(request)) ||
       (searchAllCaches && (await caches.match(request))) ||
       (fallbackKey && (await cache.match(fallbackKey)));
+    if (cached) return cached;
+    throw err;
+  }
+}
+
+// Pages read their params client-side, so offline an unvisited `stream.html?song=x` or
+// `?project=y` is served by its cached page with the query ignored, before the root shell.
+async function networkFirstNavigation(request) {
+  const cache = await caches.open(SHELL_CACHE);
+  try {
+    const res = await fetch(request);
+    if (res && res.ok) cache.put(request, res.clone());
+    return res;
+  } catch (err) {
+    const cached =
+      (await cache.match(request)) ||
+      (await cache.match(request, { ignoreSearch: true })) ||
+      (await cache.match("./"));
     if (cached) return cached;
     throw err;
   }

@@ -13,6 +13,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Rehearsal" />
+  <!-- Before first paint: the cached project theme (see js/theme-boot.js). Classic + synchronous on purpose; needs no CSS. -->
+  <script src="js/theme-boot.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&display=swap" />
@@ -23,15 +25,16 @@
 
   <main class="landing" aria-live="polite">
     <header class="landing__header">
-      <p class="player__eyebrow">Interactive Stem Player</p>
-      <h1 class="landing__title">Rehearsal Tracks</h1>
+      <p class="player__eyebrow" id="eyebrow">Interactive Stem Player</p>
+      <h1 class="landing__title" id="page-title">Rehearsal Tracks</h1>
+      <p class="landing__sub" id="page-note" hidden></p>
     </header>
 
     <div id="song-list" class="song-list"></div>
 
     <section id="downloads" class="downloads" hidden></section>
 
-    <p class="player__hint">Created EXCLUSIVELY for (and beta tested by) the Cast of Anonymous Theatre's TOXIC AVENGER</p>
+    <p class="player__hint" id="credit" hidden></p>
   </main>
 
   <script type="module" src="js/landing.js"></script>

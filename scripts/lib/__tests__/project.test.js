@@ -1,7 +1,7 @@
 // scripts/lib/__tests__/project.test.js
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeProject, assertSongOwnership, LEGACY_PROJECT_ID } from "../project.js";
+import { normalizeProject, assertSongOwnership, buildNewProject, LEGACY_PROJECT_ID } from "../project.js";
 
 test("LEGACY_PROJECT_ID is the pre-multi-project show", () => {
   assert.equal(LEGACY_PROJECT_ID, "toxic-avenger");
@@ -47,4 +47,25 @@ test("assertSongOwnership allows new ids, own project, and unassigned (pre-migra
 
 test("assertSongOwnership rejects a song owned by another project", () => {
   assert.throws(() => assertSongOwnership({ id: "s", project: "other" }, "show"), /already belongs to project "other"/);
+});
+
+test("buildNewProject: a valid new project with defaults (unlisted, neutral, no songs)", () => {
+  assert.deepEqual(buildNewProject({ id: "show", name: "Show" }), {
+    id: "show", name: "Show", credit: "", listed: false, archived: false,
+    theme: { preset: "neutral", overrides: {} }, songOrder: [],
+  });
+});
+
+test("buildNewProject keeps credit, listed, preset and valid overrides", () => {
+  const p = buildNewProject({ id: "show", name: "Show", credit: "For the cast", listed: true, preset: "toxic", overrides: { accent: "#FF0000" } });
+  assert.equal(p.listed, true);
+  assert.equal(p.credit, "For the cast");
+  assert.deepEqual(p.theme, { preset: "toxic", overrides: { accent: "#FF0000" } });
+});
+
+test("buildNewProject rejects a bad id, an unknown preset and bad overrides", () => {
+  assert.throws(() => buildNewProject({ id: "Show!", name: "S" }), /invalid id/);
+  assert.throws(() => buildNewProject({ id: "show", name: "S", preset: "nope" }), /unknown preset/);
+  assert.throws(() => buildNewProject({ id: "show", name: "S", overrides: { glow: "#ffffff" } }), /unknown token/);
+  assert.throws(() => buildNewProject({ id: "show", name: "S", overrides: { accent: "red" } }), /invalid colour/);
 });

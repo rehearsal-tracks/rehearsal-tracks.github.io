@@ -85,7 +85,13 @@ body::before {
 /* Theme-specific extras hang off <html data-theme="…"> (set by js/themes/apply.js). The defaults
    above are the toxic look; calmer themes switch off the breathing glow. A bespoke preset can add
    its own [data-theme="<id>"] block here. */
-[data-theme="neutral"] body::before { animation: none; opacity: 0.45; }
+/* neutral = "stage": the corner washes (violet gel top-right, crimson bottom-left, gold bottom-right)
+   breathe slowly like house lights, instead of toxic's fast pulse. */
+[data-theme="neutral"] body::before { animation: stage-breathe 6s ease-in-out infinite; }
+@keyframes stage-breathe {
+  0%, 100% { opacity: 0.4;  transform: scale(1); }
+  50%      { opacity: 0.7;  transform: scale(1.03); }
+}
 
 /* The gooey "toxic waste" lava-lamp layer (built + animated in js/lava-lamp.js). Fixed, full
    viewport, behind all content but in FRONT of the corner glows (z-index -1 vs -2). The canvas
@@ -439,6 +445,8 @@ body { padding-top: 64px; }
   color: var(--text-dim); font-size: 11px; letter-spacing: 0.12em;
   text-transform: uppercase; font-weight: 600;
 }
+.nav-drawer__home[hidden] { display: none; }
+.nav-drawer__switch { margin-top: 14px; border-top: 1px solid var(--line); border-radius: 0; padding-top: 16px; }
 .nav-drawer__list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .nav-drawer__song:hover { background: var(--bg-elev); }
 .nav-drawer__song.is-current {
@@ -554,6 +562,8 @@ body { padding-top: 64px; }
 
 /* ── Downloads / storage section (js/offline-ui.js, landing page) ─────────────────────────────── */
 .downloads { margin-top: 28px; }
+.downloads__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; }
+.downloads__confirm { font-size: 14px; color: var(--text); flex: 1 1 100%; }
 .downloads__heading {
   font-family: var(--font-display); font-weight: 400; font-size: 18px;
   letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-dim);
