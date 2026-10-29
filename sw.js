@@ -51,6 +51,7 @@ const SHELL_ASSETS = [
   "js/stream.js",
   "js/media-session.js",
   "js/sw-register.js",
+  "js/theme-boot.js",
   "silence.mp3",
   "js/lib/catalog-view.js",
   "js/lib/safe-id.js",
