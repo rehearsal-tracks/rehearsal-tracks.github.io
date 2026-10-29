@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readRemoteManifest, uploadDir, deleteRemoteSong, deleteRemoteStem, updateRemoteManifest } from "./lib/upload.js";
+import { LEGACY_PROJECT_ID } from "./lib/project.js";
 import { refreshRemoteCatalog } from "./lib/remote-catalog.js";
 import { safeId, safeFilename } from "./lib/safe-path.js";
 import { reorderStems, editMeta, addStem, renameStem, removeStem } from "./lib/manifest-ops.js";
@@ -112,7 +113,8 @@ async function route(req, res, pathname) {
     const outRoot = join(__dirname, "..", "dist", "songs", safeSong);
     try {
       const { segmentSong } = await import("./lib/segment.js");
-      await segmentSong({ inputDir, id: safeSong, title, artist, bitrate, outRoot });
+      // Phase 2: every admin-added song joins toxic-avenger. Phase 4 adds a project selector.
+      await segmentSong({ inputDir, id: safeSong, project: LEGACY_PROJECT_ID, title, artist, bitrate, outRoot });
       await uploadDir(outRoot, BUCKET, `songs/${safeSong}`);
       const catalog = await refresh();
       return send(res, 201, { ok: true, id: safeSong, songCount: catalog.songCount });

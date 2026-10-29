@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// Usage: node scripts/segment-song.js <input-dir> --id=<id> --title="…" --artist="…" [--bitrate=128k] [--no-upload] [--bucket=stem-player]
+// Usage: node scripts/segment-song.js <input-dir> --id=<id> --project=<pid> --title="…" --artist="…" [--bitrate=128k] [--no-upload] [--bucket=stem-player]
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { segmentSong } from "./lib/segment.js";
-import { uploadDir } from "./lib/upload.js";
+import { uploadDir, readRemoteJsonIfExists } from "./lib/upload.js";
+import { safeId } from "./lib/safe-path.js";
+import { assertSongOwnership } from "./lib/project.js";
 import { refreshRemoteCatalog, describeRefresh } from "./lib/remote-catalog.js";
 
 function parseArgs(argv) {
@@ -30,17 +32,27 @@ function assertTools(names) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const inputDir = args._[0];
-  if (!inputDir) fail("Usage: segment-song.js <input-dir> --id=<id> --title=… --artist=…");
-  for (const req of ["id", "title", "artist"]) if (!args[req]) fail(`Missing required --${req}`);
+  if (!inputDir) fail("Usage: segment-song.js <input-dir> --id=<id> --project=<pid> --title=… --artist=…");
+  for (const req of ["id", "project", "title", "artist"]) if (!args[req]) fail(`Missing required --${req}`);
   assertTools(["ffmpeg", "ffprobe", "audiowaveform", ...(args.upload ? ["rclone"] : [])]);
 
-  const outRoot = join("dist", "songs", args.id);
-  await segmentSong({ inputDir, id: args.id, title: args.title, artist: args.artist, bitrate: args.bitrate, outRoot, onLog: (m) => console.log(m) });
+  const id = safeId(args.id), project = safeId(args.project);
+  if (args.upload) {
+    // The project must already exist (admin tool, or the migration for toxic-avenger), and a song id
+    // can't move between projects. Skipped for --no-upload, which never touches R2.
+    if (!(await readRemoteJsonIfExists(args.bucket, `projects/${project}/project.json`))) {
+      fail(`Project "${project}" doesn't exist on R2 (projects/${project}/project.json). Create it first.`);
+    }
+    assertSongOwnership(await readRemoteJsonIfExists(args.bucket, `songs/${id}/manifest.json`), project);
+  }
+
+  const outRoot = join("dist", "songs", id);
+  await segmentSong({ inputDir, id, project, title: args.title, artist: args.artist, bitrate: args.bitrate, outRoot, onLog: (m) => console.log(m) });
   console.log(`✔ wrote ${join(outRoot, "manifest.json")}`);
 
   if (args.upload) {
     console.log("→ uploading to R2…");
-    const dest = await uploadDir(outRoot, args.bucket, `songs/${args.id}`);
+    const dest = await uploadDir(outRoot, args.bucket, `songs/${id}`);
     console.log(`✔ uploaded to ${dest}`);
     console.log("→ refreshing catalogs…");
     console.log(`✔ ${describeRefresh(await refreshRemoteCatalog(args.bucket))}`);
