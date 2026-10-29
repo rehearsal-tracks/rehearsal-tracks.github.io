@@ -106,16 +106,22 @@ self.addEventListener("activate", (event) => {
     // Carry the last-seen R2 JSON (projects.json, project catalogs, manifests) into the new runtime
     // cache before pruning: a cast member who updated online and then cold-starts offline (say, at
     // the theatre) still gets their project page, drawer and downloads list.
-    const runtime = await caches.open(RUNTIME_CACHE);
-    for (const name of names.filter((n) => n.startsWith("rt-runtime-") && n !== RUNTIME_CACHE)) {
-      const old = await caches.open(name);
-      for (const req of await old.keys()) {
-        if (!req.url.startsWith(R2_ORIGIN) || !req.url.endsWith(".json")) continue;
-        if (await runtime.match(req)) continue;
-        const res = await old.match(req);
-        if (res) await runtime.put(req, res);
+    // Best-effort and per entry: a failed copy (e.g. a full device) must never skip the prune or
+    // clients.claim() below.
+    try {
+      const runtime = await caches.open(RUNTIME_CACHE);
+      for (const name of names.filter((n) => n.startsWith("rt-runtime-") && n !== RUNTIME_CACHE)) {
+        const old = await caches.open(name);
+        const reqs = (await old.keys()).filter((r) => r.url.startsWith(R2_ORIGIN) && r.url.endsWith(".json"));
+        await Promise.all(reqs.map(async (req) => {
+          try {
+            if (await runtime.match(req)) return;
+            const res = await old.match(req);
+            if (res) await runtime.put(req, res);
+          } catch (e) { console.warn("[sw] couldn't carry", req.url, e); }
+        }));
       }
-    }
+    } catch (e) { console.warn("[sw] carry-forward failed:", e); }
     await Promise.all(
       names
         .filter((n) => !CACHE_ALLOWLIST.has(n) && !n.startsWith(SONG_CACHE_PREFIX))

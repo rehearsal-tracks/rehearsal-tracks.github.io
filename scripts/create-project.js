@@ -47,7 +47,12 @@ async function main() {
   if (!args.apply) return console.log("\nDry run only. Re-run with --apply to write.");
   await writeRemoteProject(args.bucket, project.id, project);
   console.log(`✔ created ${project.id}`);
-  console.log(`✔ ${describeRefresh(await refreshRemoteCatalog(args.bucket))}`);
+  try {
+    console.log(`✔ ${describeRefresh(await refreshRemoteCatalog(args.bucket))}`);
+  } catch (e) {
+    // The project exists now, so re-running create-project would refuse; just rebuild the catalogs.
+    throw new Error(`project created, but the catalog refresh failed (${e.message}). Run: node scripts/refresh-catalog.js`);
+  }
   console.log(`  Page: index.html?project=${project.id}   Add songs: segment-song.js … --project=${project.id}`);
 }
 

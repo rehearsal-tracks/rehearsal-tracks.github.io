@@ -160,16 +160,19 @@ export async function mountDownloadsSection(container, songs) {
   // current = id of the song downloading right now (its partial copy isn't listed yet)
   const state = { busy: false, progress: "", message: "", failed: [], confirming: false, current: null };
   let generation = 0; // refreshes can overlap; only the newest one renders
-  let progressEl = null; // the busy status line, updated in place on every progress tick
+  let progressEl = null; // busy status line (screen readers hear it once per song)
+  let pctEl = null;      // within-song percentage, visual only (updated many times per song)
   let focusActions = false; // after a click re-renders the buttons, keep keyboard focus in the row
   // The section is rebuilt on every progress tick; only the status line should be announced.
   container.setAttribute("aria-live", "off");
   window.addEventListener("online", () => refresh());
   window.addEventListener("offline", () => refresh());
 
-  function setProgress(text) {
+  function setProgress(text, pct = "") {
     state.progress = text;
+    state.pct = pct;
     if (progressEl) progressEl.textContent = text;
+    if (pctEl) pctEl.textContent = pct;
   }
 
   async function refresh() {
@@ -193,7 +196,7 @@ export async function mountDownloadsSection(container, songs) {
       : `${tick.done} / ${tick.total} songs`);
     const { total, failed } = await downloadProject(list, {
       isDownloaded: (s) => isDownloaded(s.id),
-      downloadSong: (s) => downloadSongById(s, (f) => setProgress(label(Math.round(f * 100)))),
+      downloadSong: (s) => downloadSongById(s, (f) => setProgress(label(null), `${Math.round(f * 100)}%`)),
       shouldStop: isQuotaError,
       onProgress: (p) => { tick = p; state.current = p.current?.id ?? null; setProgress(label(null)); refresh(); },
     });
@@ -225,6 +228,7 @@ export async function mountDownloadsSection(container, songs) {
     container.hidden = false;
     container.replaceChildren();
     progressEl = null;
+    pctEl = null;
     const missing = songs.filter((s) => !ids.includes(s.id));
     const offline = navigator.onLine === false;
 
@@ -234,7 +238,9 @@ export async function mountDownloadsSection(container, songs) {
       btn.disabled = true;
       progressEl = el("span", "offline__status", state.progress);
       progressEl.setAttribute("role", "status");
-      actions.append(btn, progressEl);
+      pctEl = el("span", "offline__status", state.pct || "");
+      pctEl.setAttribute("aria-hidden", "true");
+      actions.append(btn, progressEl, pctEl);
     } else if (state.confirming) {
       actions.append(el("span", "downloads__confirm", `Remove ${ids.length} downloaded song(s) from this device?`));
       const yes = el("button", "offline__btn", "Remove");
@@ -265,7 +271,12 @@ export async function mountDownloadsSection(container, songs) {
     container.append(actions);
     if (focusActions) {
       const btn = actions.querySelector("button:not(:disabled)");
-      if (btn) { btn.focus(); focusActions = false; }
+      if (btn) {
+        focusActions = false;
+        // Only reclaim focus that the re-render dropped; never yank it or scroll the page.
+        const active = document.activeElement;
+        if (!active || active === document.body) btn.focus({ preventScroll: true });
+      }
     }
 
     if (ids.length) {
