@@ -5,6 +5,7 @@ import { buildManifest } from "../manifest.js";
 test("builds manifest matching schema v1 with content-versioned media paths", () => {
   const m = buildManifest({
     id: "midnight",
+    project: "show",
     title: "Midnight",
     artist: "Andrew Bray",
     stems: [
@@ -14,6 +15,7 @@ test("builds manifest matching schema v1 with content-versioned media paths", ()
   });
   assert.equal(m.schemaVersion, 1);
   assert.equal(m.id, "midnight");
+  assert.equal(m.project, "show");
   assert.equal(m.durationSeconds, 612.4); // max of stem durations
   assert.deepEqual(m.stems[0], {
     name: "Lead Vocal",
@@ -27,14 +29,14 @@ test("builds manifest matching schema v1 with content-versioned media paths", ()
 
 test("throws when a stem is missing its content rev", () => {
   assert.throws(
-    () => buildManifest({ id: "x", title: "X", artist: "Y", stems: [{ name: "Bass", slug: "bass", seconds: 180.5 }] }),
+    () => buildManifest({ id: "x", project: "show", title: "X", artist: "Y", stems: [{ name: "Bass", slug: "bass", seconds: 180.5 }] }),
     /missing a content rev/i
   );
 });
 
 test("persists seconds on every stem (needed for later edits)", () => {
   const m = buildManifest({
-    id: "x", title: "X", artist: "Y",
+    id: "x", project: "show", title: "X", artist: "Y",
     stems: [{ name: "Bass", slug: "bass", seconds: 180.5, rev: "0011223344" }],
   });
   assert.equal(m.stems[0].seconds, 180.5);
@@ -42,11 +44,22 @@ test("persists seconds on every stem (needed for later edits)", () => {
 
 test("durationSeconds is the max even when the longest stem is not first", () => {
   const m = buildManifest({
-    id: "x", title: "X", artist: "Y",
+    id: "x", project: "show", title: "X", artist: "Y",
     stems: [
       { name: "Short", slug: "short", seconds: 100.0, rev: "aaaaaaaaaa" },
       { name: "Long", slug: "long", seconds: 100.04, rev: "bbbbbbbbbb" },
     ],
   });
   assert.equal(m.durationSeconds, 100.04);
+});
+
+test("requires a valid project id", () => {
+  const stems = [{ name: "Bass", slug: "bass", seconds: 1, rev: "0011223344" }];
+  assert.throws(() => buildManifest({ id: "x", title: "X", artist: "Y", stems }), /invalid id/);
+  assert.throws(() => buildManifest({ id: "x", project: "../p", title: "X", artist: "Y", stems }), /invalid id/);
+});
+
+test("project sits right after id (stable, readable key order)", () => {
+  const m = buildManifest({ id: "x", project: "show", title: "X", artist: "Y", stems: [{ name: "B", slug: "b", seconds: 1, rev: "0011223344" }] });
+  assert.deepEqual(Object.keys(m).slice(0, 3), ["schemaVersion", "id", "project"]);
 });

@@ -5,7 +5,7 @@
 //
 // Policy (matches upload.js):
 //   - songs/**  audio assets (seg_*.mp3, waveform.json, audio.m3u8) → immutable, long-lived
-//   - manifest.json / catalog.json (mutable indices)                 → no-cache
+//   - manifest.json / catalog.json / projects.json / projects/** (mutable indices) → no-cache
 //
 // Mechanism: each object is downloaded and re-uploaded (a fresh PUT stamps the headers reliably —
 // a same-key server-side copy is a no-op on R2). This is slower (bytes round-trip through your
@@ -20,7 +20,7 @@
 // After the first real run, re-check a segment in the browser: cache-control present + a repeat
 // fetch is a cache hit.
 import {
-  listSongIds, listRemoteFiles, setRemoteHeaders,
+  listSongIds, listRemoteFiles, setRemoteHeaders, isNotFound,
   CACHE_IMMUTABLE, CACHE_MUTABLE,
 } from "./lib/upload.js";
 
@@ -60,11 +60,23 @@ async function main() {
     }
   }
 
-  // catalog.json lives at the bucket root (mutable index).
-  console.log(`${dryRun ? "[dry-run] " : ""}catalog.json  ←  ${CACHE_MUTABLE}`);
-  if (!dryRun && !onlySong) await setRemoteHeaders(bucket, "catalog.json", [CACHE_MUTABLE]);
+  // Root + project indices are all mutable JSON. Song-only runs leave them alone.
+  if (!onlySong) {
+    let projectFiles = [];
+    try {
+      projectFiles = (await listRemoteFiles(bucket, "projects")).map((rel) => `projects/${rel}`);
+    } catch (e) {
+      if (!isNotFound(e)) throw e; // no projects/ prefix yet (pre-migration) is fine; anything else isn't
+    }
+    const indices = ["catalog.json", ...(projectFiles.length ? ["projects.json"] : []), ...projectFiles];
+    for (const path of indices) {
+      console.log(`${dryRun ? "[dry-run] " : ""}${path}  ←  ${CACHE_MUTABLE}`);
+      if (!dryRun) await setRemoteHeaders(bucket, path, [CACHE_MUTABLE]);
+      count++;
+    }
+  }
 
-  console.log(`${dryRun ? "[dry-run] " : "✔ "}${dryRun ? "would update" : "updated"} ${count} object(s)${onlySong ? "" : " + catalog.json"}.`);
+  console.log(`${dryRun ? "[dry-run] " : "✔ "}${dryRun ? "would update" : "updated"} ${count} object(s).`);
 }
 
 main().catch((e) => { console.error(`✖ ${e.message}`); process.exit(1); });

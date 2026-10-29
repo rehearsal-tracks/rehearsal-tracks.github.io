@@ -25,7 +25,7 @@ export async function segmentStem({ file, slug, outRoot, bitrate = "128k", rev }
 // Discover, probe, sort, segment all stems in inputDir and write manifest.json.
 // Returns { manifest, outRoot, stems, report }. onLog is an optional progress sink
 // (defaults to a no-op) so the CLI keeps its output and the server can stay quiet.
-export async function segmentSong({ inputDir, id, title, artist, bitrate = "128k", outRoot, onLog = () => {} }) {
+export async function segmentSong({ inputDir, id, project, title, artist, bitrate = "128k", outRoot, onLog = () => {} }) {
   const audioFiles = [];
   for (const f of await readdir(inputDir)) {
     if (AUDIO_EXT.has(extname(f).toLowerCase())) audioFiles.push(join(inputDir, f));
@@ -64,7 +64,7 @@ export async function segmentSong({ inputDir, id, title, artist, bitrate = "128k
     s.rev = rev; // buildManifest reads this to form the versioned src/waveform paths
   }
 
-  const manifest = buildManifest({ id, title, artist, stems });
+  const manifest = buildManifest({ id, project, title, artist, stems });
   await writeFile(join(outRoot, "manifest.json"), JSON.stringify(manifest, null, 2));
   return { manifest, outRoot, stems, report };
 }

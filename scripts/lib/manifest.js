@@ -1,7 +1,11 @@
-export function buildManifest({ id, title, artist, stems }) {
+import { safeId } from "./safe-path.js";
+
+// `project` (owning project id) is required for every new song (multi-project spec §3).
+export function buildManifest({ id, project, title, artist, stems }) {
   return {
     schemaVersion: 1,
     id,
+    project: safeId(project),
     title,
     artist,
     durationSeconds: Math.max(...stems.map((s) => s.seconds)),

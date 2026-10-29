@@ -80,11 +80,11 @@ and tells you what's missing), plus R2 configured once — see
 
    ```bash
    node scripts/segment-song.js path/to/stem-folder \
-     --id="my-song" --title="My Song" --artist="Andrew Bray"
+     --id="my-song" --project="toxic-avenger" --title="My Song" --artist="Andrew Bray"
    ```
 
    This segments + generates waveforms locally (into `dist/`), uploads to
-   `r2:stem-player/songs/my-song/`, and refreshes `catalog.json`. Flags:
+   `r2:stem-player/songs/my-song/`, and refreshes the catalogs. `--project` must name an existing project (`projects/<pid>/project.json` on R2), and a song id already owned by another project is rejected. Flags:
    `--bitrate=128k`, `--bucket=stem-player`, `--no-upload` (encode only).
 
 ### Upload a whole album
@@ -97,14 +97,14 @@ ALBUM="$HOME/Music/My Album"
 for dir in "$ALBUM"/*/; do
   folder=$(basename "$dir")
   id=$(printf '%s' "$folder" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
-  node scripts/segment-song.js "$dir" --id="$id" --title="$folder" --artist="$ARTIST" \
+  node scripts/segment-song.js "$dir" --id="$id" --project="toxic-avenger" --title="$folder" --artist="$ARTIST" \
     || echo "!!! FAILED: $folder"
 done
 ```
 
 ### Rebuild the catalog only
 
-If songs are already on R2 and you just need to regenerate `catalog.json`
+If songs are already on R2 and you just need to regenerate the catalogs (`projects/<pid>/catalog.json`, `projects.json`, legacy `catalog.json`)
 (e.g. after a manual change), skip re-encoding:
 
 ```bash
