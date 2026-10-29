@@ -91,3 +91,19 @@ test("removeStem rejects unknown slug and removing the last stem", () => {
   const one = base(); one.stems = [one.stems[0]];
   assert.throws(() => removeStem(one, "drums"), /last stem/i);
 });
+
+test("every manifest op preserves the owning project", () => {
+  const owned = {
+    schemaVersion: 1, id: "s", project: "toxic-avenger", title: "T", artist: "A", durationSeconds: 2,
+    stems: [{ name: "A", slug: "a", seconds: 2, src: "a/1/audio.m3u8", waveform: "a/1/waveform.json" },
+            { name: "B", slug: "b", seconds: 1, src: "b/1/audio.m3u8", waveform: "b/1/waveform.json" }],
+  };
+  const results = [
+    reorderStems(owned, ["b", "a"]),
+    editMeta(owned, { title: "New" }),
+    addStem(owned, { name: "C", slug: "c", seconds: 1, src: "c/1/audio.m3u8", waveform: "c/1/waveform.json" }),
+    renameStem(owned, "a", "Alpha"),
+    removeStem(owned, "b"),
+  ];
+  for (const m of results) assert.equal(m.project, "toxic-avenger");
+});

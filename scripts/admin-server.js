@@ -6,8 +6,8 @@ import { join, dirname, extname, normalize } from "node:path";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readRemoteManifest, uploadDir, deleteRemoteSong, deleteRemoteStem, updateRemoteManifest } from "./lib/upload.js";
-import { LEGACY_PROJECT_ID } from "./lib/project.js";
+import { readRemoteManifest, uploadDir, deleteRemoteSong, deleteRemoteStem, updateRemoteManifest, readRemoteJsonIfExists } from "./lib/upload.js";
+import { LEGACY_PROJECT_ID, assertSongOwnership } from "./lib/project.js";
 import { refreshRemoteCatalog } from "./lib/remote-catalog.js";
 import { safeId, safeFilename } from "./lib/safe-path.js";
 import { reorderStems, editMeta, addStem, renameStem, removeStem } from "./lib/manifest-ops.js";
@@ -110,6 +110,12 @@ async function route(req, res, pathname) {
     const safeUp = safeId(uploadId), safeSong = safeId(id);
     if (!title || !artist) return sendError(res, 400, "title and artist are required");
     const inputDir = join(TMP_ROOT, safeUp);
+    try {
+      assertSongOwnership(await readRemoteJsonIfExists(BUCKET, `songs/${safeSong}/manifest.json`), LEGACY_PROJECT_ID);
+    } catch (e) {
+      await rm(inputDir, { recursive: true, force: true });
+      return sendError(res, 409, e.message);
+    }
     const outRoot = join(__dirname, "..", "dist", "songs", safeSong);
     try {
       const { segmentSong } = await import("./lib/segment.js");
