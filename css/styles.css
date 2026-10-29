@@ -85,7 +85,13 @@ body::before {
 /* Theme-specific extras hang off <html data-theme="…"> (set by js/themes/apply.js). The defaults
    above are the toxic look; calmer themes switch off the breathing glow. A bespoke preset can add
    its own [data-theme="<id>"] block here. */
-[data-theme="neutral"] body::before { animation: none; opacity: 0.45; }
+/* neutral = "stage": the corner washes (violet gel top-right, crimson bottom-left, gold bottom-right)
+   breathe slowly like house lights, instead of toxic's fast pulse. */
+[data-theme="neutral"] body::before { animation: stage-breathe 6s ease-in-out infinite; }
+@keyframes stage-breathe {
+  0%, 100% { opacity: 0.4;  transform: scale(1); }
+  50%      { opacity: 0.7;  transform: scale(1.03); }
+}
 
 /* The gooey "toxic waste" lava-lamp layer (built + animated in js/lava-lamp.js). Fixed, full
    viewport, behind all content but in FRONT of the corner glows (z-index -1 vs -2). The canvas
