@@ -8,8 +8,13 @@ import {
 } from "./player-ui.js";
 import { createStretchEngine } from "./stretch/core.js";
 import { enableBackgroundAudioSession, initMediaSession } from "./media-session.js";
-import { resolveTheme, previewPresetFromQuery } from "./themes/resolve.js";
-import { applyTheme } from "./themes/apply.js";
+import { applyProjectTheme } from "./themes/apply.js";
+import { fetchProjectCatalog } from "./data.js";
+import { isSafeId } from "./lib/safe-id.js";
+import {
+  getLastProject, setLastProject, getSongProject, setSongProject, rememberProject,
+  cacheTheme, getCachedTheme,
+} from "./lib/project-state.js";
 
 const params = new URLSearchParams(location.search);
 const songId = params.get("song");
@@ -19,10 +24,11 @@ const playerEl = document.getElementById("player");
 function showError(msg) { statusEl.textContent = msg; statusEl.hidden = false; }
 
 async function main() {
-  // Phase 1: every page is Toxic Avenger. Phase 3 replaces this with the project's theme.
-  applyTheme(resolveTheme({ preset: previewPresetFromQuery(location.search) || "toxic" }));
-  initNav({ currentSongId: songId });
-  if (!songId) return showError("No ?song=<id> specified.");
+  const nav = initNav({ currentSongId: songId });
+  if (!songId || !isSafeId(songId)) {
+    applyProjectTheme(null);
+    return showError(songId ? "That song link isn't valid." : "No ?song=<id> specified.");
+  }
   const base = `${R2_BASE}/songs/${songId}`;
   let manifest;
   try {
@@ -30,8 +36,35 @@ async function main() {
     if (!res.ok) throw new Error(`manifest ${res.status}`);
     manifest = await res.json();
   } catch (e) {
+    const guess = [getSongProject(songId), getLastProject()].find(isSafeId) ?? null;
+    applyProjectTheme(guess ? getCachedTheme(guess)?.setting : null);
+    if (guess) nav.setProject({ id: guess, songs: null });
     return showError(`Couldn't load manifest at ${base}/manifest.json — ${e.message}`);
   }
+
+  // The song's project (spec §1): its manifest says. An old offline copy downloaded before the
+  // migration has no `project`, so fall back to what this device last saw for the song, then the
+  // last project opened. No project → neutral theme, drawer offers just "Switch project".
+  const pid = [manifest.project, getSongProject(songId), getLastProject()].find(isSafeId) ?? null;
+  const catalogReady = pid ? fetchProjectCatalog(pid).catch(() => null) : Promise.resolve(null);
+  // The theme must be applied before the player builds (waveform colours). A cached theme means no
+  // waiting on the catalog; otherwise (first visit) wait for it.
+  const cached = pid ? getCachedTheme(pid) : null;
+  applyProjectTheme(cached ? cached.setting : (await catalogReady)?.project?.theme);
+  if (pid) {
+    nav.setProject({ id: pid, songs: null });
+    setLastProject(pid);
+    if (manifest.project === pid) setSongProject(songId, pid);
+  }
+  catalogReady.then((catalog) => {
+    if (!catalog?.project) return;
+    nav.setProject({ id: pid, songs: catalog.songs });
+    rememberProject(catalog.project);
+    cacheTheme(pid, catalog.project.theme);
+    const creditEl = document.getElementById("credit");
+    creditEl.textContent = catalog.project.credit || "";
+    creditEl.hidden = !catalog.project.credit;
+  });
 
   document.getElementById("title").textContent = manifest.title;
   document.getElementById("artist").textContent = manifest.artist;
