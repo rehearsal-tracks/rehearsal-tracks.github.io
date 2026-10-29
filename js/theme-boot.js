@@ -11,7 +11,7 @@
     var key;
     if (q.has("song")) key = (get("song-project:v1") || {})[q.get("song")];
     else if (q.has("projects")) key = "@picker";
-    else if (q.get("project")) key = q.get("project");
+    else if (q.has("project")) key = q.get("project") || "@picker"; // empty → landing shows the picker
     else {
       // Returning visitor: the landing page reopens the last project unless it's archived.
       var last = get("last-project");

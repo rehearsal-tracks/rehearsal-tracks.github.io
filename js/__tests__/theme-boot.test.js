@@ -56,6 +56,14 @@ test("no query → the last project; else the picker's theme", () => {
   assert.equal(run("?projects", p).theme, "neutral");
 });
 
+test("an empty ?project= paints the picker's theme, not the last project's", () => {
+  const s = storage();
+  cacheTheme("show", { preset: "toxic" }, s);
+  cacheTheme(PICKER_THEME_KEY, { preset: "neutral" }, s);
+  setLastProject("show", s);
+  assert.equal(run("?project=", s).theme, "neutral");
+});
+
 test("an archived last project paints the picker's theme (the landing page shows the picker)", () => {
   const s = storage();
   cacheTheme("old", { preset: "toxic" }, s);

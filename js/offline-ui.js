@@ -157,9 +157,13 @@ function el(tag, className, text) {
 export async function mountDownloadsSection(container, songs) {
   if (!supported() || !container || !songs?.length) return;
   const titleById = new Map(songs.map((s) => [s.id, s.title]));
-  const state = { busy: false, progress: "", message: "", failed: [], confirming: false };
+  // current = id of the song downloading right now (its partial copy isn't listed yet)
+  const state = { busy: false, progress: "", message: "", failed: [], confirming: false, current: null };
   let generation = 0; // refreshes can overlap; only the newest one renders
   let progressEl = null; // the busy status line, updated in place on every progress tick
+  let focusActions = false; // after a click re-renders the buttons, keep keyboard focus in the row
+  // The section is rebuilt on every progress tick; only the status line should be announced.
+  container.setAttribute("aria-live", "off");
   window.addEventListener("online", () => refresh());
   window.addEventListener("offline", () => refresh());
 
@@ -170,12 +174,15 @@ export async function mountDownloadsSection(container, songs) {
 
   async function refresh() {
     const gen = ++generation;
-    const ids = (await listDownloadedIds().catch(() => [])).filter((id) => titleById.has(id));
+    const ids = (await listDownloadedIds().catch(() => []))
+      .filter((id) => titleById.has(id) && id !== state.current);
     const est = await storageEstimate();
     if (gen === generation) render(ids, est);
   }
 
   async function downloadAll(list) {
+    if (state.busy) return; // a double tap must not start a second run over the same caches
+    focusActions = true;
     Object.assign(state, { busy: true, message: "", failed: [], confirming: false, progress: "Starting…" });
     refresh();
     await requestPersistence();
@@ -188,9 +195,10 @@ export async function mountDownloadsSection(container, songs) {
       isDownloaded: (s) => isDownloaded(s.id),
       downloadSong: (s) => downloadSongById(s, (f) => setProgress(label(Math.round(f * 100)))),
       shouldStop: isQuotaError,
-      onProgress: (p) => { tick = p; setProgress(label(null)); refresh(); },
+      onProgress: (p) => { tick = p; state.current = p.current?.id ?? null; setProgress(label(null)); refresh(); },
     });
     state.busy = false;
+    state.current = null;
     state.failed = failed.map((f) => f.song);
     state.message = failed.length
       ? (failed.some((f) => isQuotaError(f.error)) ? "Not enough space on this device. " : "") +
@@ -200,6 +208,8 @@ export async function mountDownloadsSection(container, songs) {
   }
 
   async function removeAll(ids) {
+    if (state.busy) return;
+    focusActions = true;
     Object.assign(state, { busy: true, confirming: false, message: "", progress: "Removing…" });
     refresh();
     let freed = 0;
@@ -223,13 +233,14 @@ export async function mountDownloadsSection(container, songs) {
       const btn = el("button", "offline__btn", "Working…");
       btn.disabled = true;
       progressEl = el("span", "offline__status", state.progress);
+      progressEl.setAttribute("role", "status");
       actions.append(btn, progressEl);
     } else if (state.confirming) {
       actions.append(el("span", "downloads__confirm", `Remove ${ids.length} downloaded song(s) from this device?`));
       const yes = el("button", "offline__btn", "Remove");
       yes.addEventListener("click", () => removeAll(ids));
       const no = el("button", "offline__btn offline__btn--ghost", "Cancel");
-      no.addEventListener("click", () => { state.confirming = false; refresh(); });
+      no.addEventListener("click", () => { state.confirming = false; focusActions = true; refresh(); });
       actions.append(yes, no);
     } else {
       if (missing.length) {
@@ -245,13 +256,17 @@ export async function mountDownloadsSection(container, songs) {
       }
       if (ids.length) {
         const rm = el("button", "offline__btn offline__btn--ghost", "Remove downloads");
-        rm.addEventListener("click", () => { state.confirming = true; state.message = ""; refresh(); });
+        rm.addEventListener("click", () => { state.confirming = true; state.message = ""; focusActions = true; refresh(); });
         actions.append(rm);
       }
       const note = offline && missing.length ? "Connect to the internet to download" : state.message;
       if (note) actions.append(el("span", "offline__status", note));
     }
     container.append(actions);
+    if (focusActions) {
+      const btn = actions.querySelector("button:not(:disabled)");
+      if (btn) { btn.focus(); focusActions = false; }
+    }
 
     if (ids.length) {
       container.append(el("h2", "downloads__heading", "Downloaded for offline"));
@@ -260,7 +275,8 @@ export async function mountDownloadsSection(container, songs) {
         const row = el("div", "downloads__row");
         const name = el("span", "downloads__name", titleById.get(id));
         const size = el("span", "downloads__size");
-        songSize(id).then((b) => { size.textContent = b ? formatBytes(b) : ""; }).catch(() => {});
+        // Sizes read every cached entry: skip them while a bulk action re-renders on each tick.
+        if (!state.busy) songSize(id).then((b) => { size.textContent = b ? formatBytes(b) : ""; }).catch(() => {});
         const rm = el("button", "downloads__remove", "Remove");
         rm.setAttribute("aria-label", `Remove ${name.textContent} download`);
         rm.disabled = state.busy;

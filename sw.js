@@ -103,6 +103,19 @@ self.addEventListener("message", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const names = await caches.keys();
+    // Carry the last-seen R2 JSON (projects.json, project catalogs, manifests) into the new runtime
+    // cache before pruning: a cast member who updated online and then cold-starts offline (say, at
+    // the theatre) still gets their project page, drawer and downloads list.
+    const runtime = await caches.open(RUNTIME_CACHE);
+    for (const name of names.filter((n) => n.startsWith("rt-runtime-") && n !== RUNTIME_CACHE)) {
+      const old = await caches.open(name);
+      for (const req of await old.keys()) {
+        if (!req.url.startsWith(R2_ORIGIN) || !req.url.endsWith(".json")) continue;
+        if (await runtime.match(req)) continue;
+        const res = await old.match(req);
+        if (res) await runtime.put(req, res);
+      }
+    }
     await Promise.all(
       names
         .filter((n) => !CACHE_ALLOWLIST.has(n) && !n.startsWith(SONG_CACHE_PREFIX))
