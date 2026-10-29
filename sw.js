@@ -53,6 +53,7 @@ const SHELL_ASSETS = [
   "js/sw-register.js",
   "silence.mp3",
   "js/lib/catalog-view.js",
+  "js/lib/safe-id.js",
   "js/player-ui.js",
   "js/stretch/core.js",
   "js/vendor/SignalsmithStretch.mjs",
