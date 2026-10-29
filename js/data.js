@@ -19,6 +19,3 @@ export const fetchProjectsIndex = () => getJson("projects.json");
 // projects/<pid>/catalog.json — { schemaVersion: 2, project: { id, name, credit, archived, theme },
 // songs }. `pid` must already have passed isSafeId (it's interpolated into the path).
 export const fetchProjectCatalog = (pid) => getJson(`projects/${pid}/catalog.json`);
-
-// LEGACY root catalog (Toxic Avenger only). Removed in Task 7 once nothing imports it.
-export const fetchCatalog = () => getJson("catalog.json");

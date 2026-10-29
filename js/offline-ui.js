@@ -127,7 +127,8 @@ export async function mountDownloadsSection(container, songs) {
   const titleById = new Map((songs || []).map((s) => [s.id, s.title]));
 
   async function refresh() {
-    const ids = await listDownloadedIds().catch(() => []);
+    // Only this project's songs; other projects' downloads are listed on their own pages.
+    const ids = (await listDownloadedIds().catch(() => [])).filter((id) => titleById.has(id));
     if (!ids.length) { container.innerHTML = ""; container.hidden = true; return; }
     container.hidden = false;
     container.innerHTML = "";

@@ -439,6 +439,8 @@ body { padding-top: 64px; }
   color: var(--text-dim); font-size: 11px; letter-spacing: 0.12em;
   text-transform: uppercase; font-weight: 600;
 }
+.nav-drawer__home[hidden] { display: none; }
+.nav-drawer__switch { margin-top: 14px; border-top: 1px solid var(--line); border-radius: 0; padding-top: 16px; }
 .nav-drawer__list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .nav-drawer__song:hover { background: var(--bg-elev); }
 .nav-drawer__song.is-current {
